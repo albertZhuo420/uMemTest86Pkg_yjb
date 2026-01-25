@@ -1,0 +1,45 @@
+#PassMark MemTest86
+#
+#Copyright (c) 2022
+#	This software is the confidential and proprietary information of PassMark
+#	Software Pty. Ltd. ("Confidential Information").  You shall not disclose
+#	such Confidential Information and shall use it only in accordance with
+#	the terms of the license agreement you entered into with PassMark
+#	Software.
+#
+#Program:
+#	MemTest86
+#
+#Module:
+#	DMATest.inf
+#
+#Author(s):
+#	Keith Mah
+#
+#Description:
+#	[DMA test, disk transfer] - This test writes and reads a series of 
+#  random numbers into disk via DMA.
+#
+#History
+#	19 Jan 2022: Initial version
+
+[Defines]
+  INF_VERSION                    = 0x00010005
+  BASE_NAME                      = DMATest
+  FILE_GUID                      = 0821EB53-42E4-425E-8A34-F826433234C1
+  MODULE_TYPE                    = BASE
+  VERSION_STRING                 = 0.1
+  LIBRARY_CLASS                  = DXE_DRIVER DXE_RUNTIME_DRIVER DXE_SAL_DRIVER UEFI_APPLICATION UEFI_DRIVER
+
+#
+# The following information is for reference only and not required by the build tools.
+#
+#  VALID_ARCHITECTURES           = IA32 X64 IPF EBC
+#
+
+[Sources.common]
+  DMATest.c
+
+[Packages]
+  MdePkg/MdePkg.dec
+  uMemTest86Pkg/uMemTest86Pkg.dec

@@ -1,0 +1,7 @@
+[PXESERVA_MENU_ENTRY]
+asset = MemTest86
+platform = x86
+kernel_efi64 = \NWA_PXE\$HEAD_DIR$\BOOTX64.EFI
+append_efi64 = TFTPROOT=\NWA_PXE\$HEAD_DIR$
+kernel_efi32 = \NWA_PXE\$HEAD_DIR$\BOOTIA32.EFI
+append_efi32 = TFTPROOT=\NWA_PXE\$HEAD_DIR$

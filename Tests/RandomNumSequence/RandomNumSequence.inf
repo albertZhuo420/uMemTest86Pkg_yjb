@@ -1,0 +1,49 @@
+#PassMark MemTest86
+#
+#Copyright (c) 2013-2016
+#	This software is the confidential and proprietary information of PassMark
+#	Software Pty. Ltd. ("Confidential Information").  You shall not disclose
+#	such Confidential Information and shall use it only in accordance with
+#	the terms of the license agreement you entered into with PassMark
+#	Software.
+#
+#Program:
+#	MemTest86
+#
+#Module:
+#	RandomNumSequence.inf
+#
+#Author(s):
+#	Keith Mah
+#
+#Description:
+#  Test 7 [Random number sequence] - This test writes a series of 
+#  random numbers into memory.
+#
+#
+#History
+#	27 Feb 2013: Initial version
+
+[Defines]
+  INF_VERSION                    = 0x00010005
+  BASE_NAME                      = RandomNumSequence
+  FILE_GUID                      = 3652139C-6C85-421B-8EF0-2AE55A3CC283
+  MODULE_TYPE                    = BASE
+  VERSION_STRING                 = 0.1
+  LIBRARY_CLASS                  = DXE_DRIVER DXE_RUNTIME_DRIVER DXE_SAL_DRIVER UEFI_APPLICATION UEFI_DRIVER
+
+#
+# The following information is for reference only and not required by the build tools.
+#
+#  VALID_ARCHITECTURES           = IA32 X64 IPF EBC
+#
+
+[Sources.common]
+  RandomNumSequence.c
+
+[Packages]
+  MdePkg/MdePkg.dec
+  uMemTest86Pkg/uMemTest86Pkg.dec
+
+[LibraryClasses]
+  RandLib

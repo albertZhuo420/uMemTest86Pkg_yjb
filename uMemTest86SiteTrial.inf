@@ -1,0 +1,133 @@
+#PassMark MemTest86
+#
+#Copyright (c) 2013-2016
+#	This software is the confidential and proprietary information of PassMark
+#	Software Pty. Ltd. ("Confidential Information").  You shall not disclose
+#	such Confidential Information and shall use it only in accordance with
+#	the terms of the license agreement you entered into with PassMark
+#	Software.
+#
+#Program:
+#	MemTest86
+#
+#Module:
+#	uMemTest86SiteTrial.inf
+#
+#Author(s):
+#	Keith Mah
+#
+
+[Defines]
+  INF_VERSION                    = 0x00010005
+  BASE_NAME                      = MemTest86-site-trial
+  FILE_GUID                      = D335081B-7A21-46AB-838D-1BE3EABF94DC
+  MODULE_TYPE                    = UEFI_APPLICATION
+  VERSION_STRING                 = 9.0
+  ENTRY_POINT                    = UefiMain
+
+[Defines.X64]
+  BASE_NAME                      = MemTest86SiteTrialX64
+
+[Defines.IA32]
+  BASE_NAME                      = MemTest86SiteTrialIA32
+
+[Defines.AARCH64]
+  BASE_NAME                      = MemTest86SiteTrialAARCH64
+
+#
+# The following information is for reference only and not required by the build tools.
+#
+#  VALID_ARCHITECTURES           = IA32 X64 IPF EBC
+#
+
+[Sources]
+  uMemTest86.c
+  AdvancedMemoryTest.c
+  LineChart.c
+  TestResultsStorage.c
+  sha2.c
+  SupportLib.c
+  Ui.c
+  imsdefect.c
+  localization.uni
+
+[Sources.X64]
+  tests_memASM.asm
+  AdvancedMemoryTestASM.asm
+
+[Packages]
+  MdePkg/MdePkg.dec
+  MdeModulePkg/MdeModulePkg.dec
+  NetworkPkg/NetworkPkg.dec
+  UefiCpuPkg/UefiCpuPkg.dec
+  uMemTest86Pkg/uMemTest86Pkg.dec
+
+[Packages.AARCH64]
+  ArmPkg/ArmPkg.dec
+
+[LibraryClasses]
+  MemTestRangesLib
+  MemTestMPSupportLib
+  CpuidLib
+  SysInfoLib
+  PointerLib
+  HiiLib
+  HobLib
+  IoLib
+  FileHandleLib
+  UefiApplicationEntryPoint
+  UefiLib
+  RandLib
+  SynchronizationLib
+  TimerLib
+  YAMLLib
+  LibEg
+  NetLib
+
+[LibraryClasses.IA32, LibraryClasses.X64]
+  MtrrLib
+
+[LibraryClasses.AARCH64]
+  ArmGenericTimerCounterLib
+
+[Protocols]
+  gEfiLoadedImageProtocolGuid         ## CONSUMES
+  gEfiBlockIoProtocolGuid
+  gEfiCpuArchProtocolGuid
+  gEfiSimpleFileSystemProtocolGuid              ## CONSUMES
+  gEfiPxeBaseCodeProtocolGuid
+  gEfiSimpleNetworkProtocolGuid
+  gEfiPartitionInfoProtocolGuid
+  gEfiIp4ServiceBindingProtocolGuid
+  gEfiIp6ServiceBindingProtocolGuid
+  gEfiUdp4ServiceBindingProtocolGuid
+  gEfiUdp6ServiceBindingProtocolGuid
+  gEfiTcp4ServiceBindingProtocolGuid
+  gEfiTcp6ServiceBindingProtocolGuid
+  gEfiHttpServiceBindingProtocolGuid
+  gEfiTcp4ProtocolGuid
+  gEfiDns4ServiceBindingProtocolGuid
+  gEfiDns4ProtocolGuid
+  gEfiTlsServiceBindingProtocolGuid
+  gEfiTlsProtocolGuid
+
+[Guids]
+  gEfiHardwareErrorVariableGuid
+  gEfiProcessorGenericErrorSectionGuid
+  gEfiProcessorSpecificErrorSectionGuid
+  gEfiPlatformMemoryErrorSectionGuid
+  gEfiPcieErrorSectionGuid
+  gEfiFirmwareErrorSectionGuid
+  gEfiPciBusErrorSectionGuid
+  gEfiPciDevErrorSectionGuid
+  gEfiDMArGenericErrorSectionGuid
+  gEfiDirectedIoDMArErrorSectionGuid
+  gEfiIommuDMArErrorSectionGuid
+  gEfiFileInfoGuid
+  gEfiAcpi20TableGuid
+  gEfiAcpiTableGuid
+
+[BuildOptions]
+  GCC:*_*_IA32_CC_FLAGS  = -Wno-error=unused-value -mpopcnt -msse4.1
+  GCC:*_*_X64_CC_FLAGS  = -Wno-error=unused-value -mpopcnt -msse4.1
+  GCC:*_*_AARCH64_CC_FLAGS  = -Wno-error=unused-value

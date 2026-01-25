@@ -1,0 +1,50 @@
+#PassMark MemTest86
+#
+#Copyright (c) 2013-2016
+#	This software is the confidential and proprietary information of PassMark
+#	Software Pty. Ltd. ("Confidential Information").  You shall not disclose
+#	such Confidential Information and shall use it only in accordance with
+#	the terms of the license agreement you entered into with PassMark
+#	Software.
+#
+#Program:
+#	MemTest86
+#
+#Module:
+#	BlockMove.inf
+#
+#Author(s):
+#	Keith Mah
+#
+#Description:
+#  Test 5 [Block move, 64 moves] - This test stresses memory by using 
+#  block move (movsl) instructions and is based on Robert Redelmeier's 
+#  burnBX test.
+#
+#
+#History
+#	27 Feb 2013: Initial version
+
+[Defines]
+  INF_VERSION                    = 0x00010005
+  BASE_NAME                      = BlockMove
+  FILE_GUID                      = 3E95EF54-D737-4F91-A0F4-C44C6EFF14B6
+  MODULE_TYPE                    = BASE
+  VERSION_STRING                 = 0.1
+  LIBRARY_CLASS                  = DXE_DRIVER DXE_RUNTIME_DRIVER DXE_SAL_DRIVER UEFI_APPLICATION UEFI_DRIVER
+
+#
+# The following information is for reference only and not required by the build tools.
+#
+#  VALID_ARCHITECTURES           = IA32 X64 IPF EBC
+#
+
+[Sources.common]
+  BlockMove.c
+
+[Sources.X64]
+  AsmBlockMove.asm
+
+[Packages]
+  MdePkg/MdePkg.dec
+  uMemTest86Pkg/uMemTest86Pkg.dec

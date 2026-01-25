@@ -1,0 +1,49 @@
+#PassMark MemTest86
+#
+#Copyright (c) 2013-2016
+#	This software is the confidential and proprietary information of PassMark
+#	Software Pty. Ltd. ("Confidential Information").  You shall not disclose
+#	such Confidential Information and shall use it only in accordance with
+#	the terms of the license agreement you entered into with PassMark
+#	Software.
+#
+#Program:
+#	MemTest86
+#
+#Module:
+#	Hammer.inf
+#
+#Author(s):
+#	Keith Mah
+#
+#Description:
+#  Test 13 [Hammer test] - The hammer test initializes all of memory with a pattern, 
+#  hammers (ie. repeatedly read) from 2 memory addresses and then checks for flipped bits in memory
+#
+#
+#History
+#	13 Aug 2014: Initial version
+
+[Defines]
+  INF_VERSION                    = 0x00010005
+  BASE_NAME                      = Hammer
+  FILE_GUID                      = 9E69C3D4-C8BA-40DF-9F47-51411F2254DE
+  MODULE_TYPE                    = BASE
+  VERSION_STRING                 = 0.1
+  LIBRARY_CLASS                  = DXE_DRIVER DXE_RUNTIME_DRIVER DXE_SAL_DRIVER UEFI_APPLICATION UEFI_DRIVER
+
+#
+# The following information is for reference only and not required by the build tools.
+#
+#  VALID_ARCHITECTURES           = IA32 X64 IPF EBC
+#
+
+[Sources.common]
+  Hammer.c
+
+[Sources.X64]
+  AsmHammerTest.asm
+
+[Packages]
+  MdePkg/MdePkg.dec
+  uMemTest86Pkg/uMemTest86Pkg.dec

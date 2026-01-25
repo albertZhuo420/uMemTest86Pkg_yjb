@@ -1,0 +1,71 @@
+#PassMark MemTest86
+#
+#Copyright (c) 2013-2016
+#	This software is the confidential and proprietary information of PassMark
+#	Software Pty. Ltd. ("Confidential Information").  You shall not disclose
+#	such Confidential Information and shall use it only in accordance with
+#	the terms of the license agreement you entered into with PassMark
+#	Software.
+#
+#Program:
+#	MemTest86
+#
+#Module:
+#	SysInfoLib.inf
+#
+#Author(s):
+#	Keith Mah
+#
+
+[Defines]
+  INF_VERSION                    = 0x00010005
+  BASE_NAME                      = SysInfoLib
+  FILE_GUID                      = 6A9C9F0C-A758-4E6D-A082-867815FB0773
+  MODULE_TYPE                    = BASE
+  VERSION_STRING                 = 1.0
+  LIBRARY_CLASS                  = SysInfoLib|DXE_DRIVER DXE_RUNTIME_DRIVER DXE_SAL_DRIVER UEFI_APPLICATION UEFI_DRIVER
+
+#
+# The following information is for reference only and not required by the build tools.
+#
+#  VALID_ARCHITECTURES           = IA32 X64 IPF EBC
+#
+
+[Sources.common ]
+  JedecIDList.c
+  controller.c
+  cpuinfo.c
+  cpuinfoMSRAMD.c
+  cpuinfoMSRIntel.c
+  cputemp.c
+  pci.c
+  SMBIOS.c
+  smbus.c
+
+[Sources.Aarch64]
+  cpuinfoARMv8.c
+
+[Packages]
+  MdePkg/MdePkg.dec
+  uMemTest86Pkg/uMemTest86Pkg.dec
+
+[Packages.AARCH64]
+  ArmPkg/ArmPkg.dec
+
+[LibraryClasses]
+  BaseLib
+  PciLib
+  PciExpressLib
+  IntelPortingLib
+
+[LibraryClasses.AARCH64]
+  ArmGenericTimerCounterLib
+  ArmLib
+  TimerLib
+
+[Guids]
+  gEfiSmbiosTableGuid
+
+[BuildOptions]
+GCC:*_*_IA32_CC_FLAGS  = -mpopcnt
+GCC:*_*_X64_CC_FLAGS  = -mpopcnt

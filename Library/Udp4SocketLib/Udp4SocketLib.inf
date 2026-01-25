@@ -1,0 +1,30 @@
+[Defines]
+  INF_VERSION                    = 0x00010005
+  BASE_NAME                      = Udp4SocketLib
+  FILE_GUID                      = 2223E2AF-A1E6-9AFF-3B37-2893A87E83DD
+  MODULE_TYPE                    = BASE
+  VERSION_STRING                 = 1.0
+  LIBRARY_CLASS                  = Udp4SocketLib|UEFI_APPLICATION
+  CONSTRUCTOR                    = Udp4SocketLibConstructor
+
+[Sources]
+  Udp4SocketLib.c
+
+[Packages]
+  MdePkg/MdePkg.dec
+  MdeModulePkg/MdeModulePkg.dec
+  uMemTest86Pkg/uMemTest86Pkg.dec
+
+[LibraryClasses]
+  DebugLib
+  UefiLib
+  BaseMemoryLib
+  MemoryAllocationLib
+  UefiRuntimeServicesTableLib
+  UefiBootServicesTableLib
+  PrintLib
+
+[Protocols]
+  gEfiUdp4ServiceBindingProtocolGuid
+  gEfiUdp4ProtocolGuid
+  gEfiUsbIoProtocolGuid

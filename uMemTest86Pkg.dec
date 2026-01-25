@@ -1,0 +1,28 @@
+#PassMark MemTest86
+#
+#Copyright (c) 2013-2016
+#	This software is the confidential and proprietary information of PassMark
+#	Software Pty. Ltd. ("Confidential Information").  You shall not disclose
+#	such Confidential Information and shall use it only in accordance with
+#	the terms of the license agreement you entered into with PassMark
+#	Software.
+#
+#Program:
+#	MemTest86
+#
+#Module:
+#	uMemTest86Pkg.dec
+#
+#Author(s):
+#	Keith Mah
+#
+
+[Defines]
+  DEC_SPECIFICATION              = 0x00010005
+  PACKAGE_NAME                   = uMemTest86Pkg
+  PACKAGE_GUID                   = F05C37E4-3CAE-400C-AE86-0DA6B001EEBA
+  PACKAGE_VERSION                = 0.0.1
+
+[Includes]
+  Include
+  Library

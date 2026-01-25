@@ -1,0 +1,64 @@
+# tftpd remap file
+#
+#   r      Replace  the  substring  matched  by  regex  by  the replacement
+#          pattern.  The replacement pattern may contain escape  sequences;
+#          see below.
+#
+#   g      Repeat  this  rule  until  it no longer matches.  This is always
+#          used with r.
+#
+#   i      Match the regex  case-insensitively.   By  default  it  is  case
+#          sensitive.
+#
+#   e      If  this  rule  matches, end rule processing after executing the
+#          rule.
+#
+#   s      If this rule matches, start rule processing over from  the  very
+#          first rule after executing this rule.
+#
+#   a      If  this  rule  matches,  refuse  the request and send an access
+#          denied error to the client.
+#
+#   G      This rule applies to GET (RRQ) requests only.
+#
+#   P      This rule applies to PUT (WRQ) requests only.
+#
+#   ~      Inverse the sense of this rule, i.e. execute the operation  only
+#          if the regex doesn't match.  Cannot used together with r.
+#
+#   The   following   escape  sequences  are  recognized  as  part  of  the
+#   replacement pattern:
+#
+#   \0     The entire string matched by the regex.
+#
+#   \1 to \9
+#          The strings matched by each  of  the  first  nine  parenthesized
+#          subexpressions, \( ... \), of the regex pattern.
+#
+#   \i     The  IP  address of the requesting host, in dotted-quad notation
+#          (e.g. 192.0.2.169).
+#
+#   \x     The IP address of the requesting host, in  hexadecimal  notation
+#          (e.g. C00002A9).
+#
+#   \\     Literal backslash.
+#
+#   \whitespace
+#          Literal whitespace.
+#
+#   \#     Literal hash mark.
+#
+#   \U     Turns all subsequent letters to upper case.
+#
+#   \L     Turns all subsequent letters to lower case.
+#
+#   \E     Cancels the effect of \U or \L.
+#
+#   If  the  mapping  file  is  changed,  you  need  to  send SIGHUP to any
+#   outstanding tftpd process.
+#
+###############################################################################
+
+# Remap backslashes to forward slashes for paths
+rg \\ /
+

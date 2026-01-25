@@ -1,0 +1,55 @@
+#PassMark MemTest86
+#
+#Copyright (c) 2013-2016
+#	This software is the confidential and proprietary information of PassMark
+#	Software Pty. Ltd. ("Confidential Information").  You shall not disclose
+#	such Confidential Information and shall use it only in accordance with
+#	the terms of the license agreement you entered into with PassMark
+#	Software.
+#
+#Program:
+#	MemTest86
+#
+#Module:
+#	YAMLLib.inf
+#
+#Author(s):
+#	Keith Mah
+#
+
+[Defines]
+  INF_VERSION                    = 0x00010005
+  BASE_NAME                      = YAMLLib
+  FILE_GUID                      = E7556753-C2BF-4FC0-89DA-22B397BCB18E
+  MODULE_TYPE                    = BASE
+  VERSION_STRING                 = 1.0
+  LIBRARY_CLASS                  = YAMLLib|DXE_DRIVER DXE_RUNTIME_DRIVER DXE_SAL_DRIVER UEFI_APPLICATION UEFI_DRIVER
+
+#
+# The following information is for reference only and not required by the build tools.
+#
+#  VALID_ARCHITECTURES           = IA32 X64 IPF EBC
+#
+
+[Sources.common]
+  api.c
+  dumper.c
+  emitter.c
+  loader.c
+  parser.c
+  reader.c
+  scanner.c
+  writer.c
+
+[Packages]
+  MdePkg/MdePkg.dec
+  uMemTest86Pkg/uMemTest86Pkg.dec
+
+[LibraryClasses]
+  BaseLib
+  BaseMemoryLib
+  DebugLib
+  MemoryAllocationLib
+
+[BuildOptions]
+  GCC:*_*_*_CC_FLAGS  = -Wno-error=unused-value
