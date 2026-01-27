@@ -68,11 +68,11 @@
   HiiLib|MdeModulePkg/Library/UefiHiiLib/UefiHiiLib.inf
   UefiHiiServicesLib|MdeModulePkg/Library/UefiHiiServicesLib/UefiHiiServicesLib.inf
   YAMLLib|uMemTest86Pkg/Library/YAMLLib/YAMLLib.inf
-  cJSONLib|uMemTest86Pkg/Library/cJSONLib/cJSON.inf
-  Udp4SocketLib|uMemTest86Pkg/Library/Udp4SocketLib/Udp4SocketLib.inf
   RcDebugLib|CpRcPkg/Library/BaseRcDebugLibNull/BaseRcDebugLibNull.inf
-  IntelPortingLib|uMemTest86Pkg/Library/IntelPortingLib/IntelPortingLib.inf
-
+  
+  # OknPortingLibs
+  cJSONLib|uMemTest86Pkg/Library/OknPortingLibs/cJSONLib/cJSON.inf
+  Udp4SocketLib|uMemTest86Pkg/Library/OknPortingLibs/Udp4SocketLib/Udp4SocketLib.inf
   #Crypt
   RngLib|MdePkg/Library/BaseRngLib/BaseRngLib.inf
   OpensslLib|CryptoPkg/Library/OpensslLib/OpensslLib.inf

@@ -171,10 +171,9 @@
 #include "images/ok.h"
 #include "images/qrcode.h"
 #include "images/qrcode_asus.h"
-#include <Library/cJSONLib.h>
-#include <Library/Udp4SocketLib.h>
+#include <Library/OknPortingLibs/cJSONLib.h>
+#include <Library/OknPortingLibs/Udp4SocketLib.h>
 #include <Library/BaseCryptLib.h>
-#include <Library/IntelPortingLib.h>
 #include <Protocol/Smbios.h>
 
 #define OKN_DDR4
@@ -1774,25 +1773,12 @@ VOID JsonHandler(cJSON *Tree)
         }
         cJSON_AddNumberToObject(Tree, "STATUS", gTestStart);
         
-    } else if (AsciiStrnCmp("testPause", Cmd->valuestring, 9) == 0) {
-        cJSON_AddBoolToObject(Tree, "SUCCESS", true);
-        gTestPause = TRUE;
     } else if (AsciiStrnCmp("testStop", Cmd->valuestring, 8) == 0) {
         cJSON_AddBoolToObject(Tree, "SUCCESS", TRUE);
         MtSupportAbortTesting();
         gTestStart = FALSE;   // fix duplicate test
         gTestStatus = 2;
         // gTestStop = TRUE;
-    } else if (AsciiStrnCmp("scan", Cmd->valuestring, 4) == 0) {
-        AsciiSPrint(gBuffer, BUF_SIZE, "%02x:%02x:%02x:%02x:%02x:%02x", ClientMAC.Addr[0], ClientMAC.Addr[1], ClientMAC.Addr[2], ClientMAC.Addr[3], ClientMAC.Addr[4], ClientMAC.Addr[5]);
-        cJSON_AddStringToObject(Tree, "MAC", gBuffer);
-        AsciiSPrint(gBuffer, BUF_SIZE, "%d.%d.%d.%d", gSocketTransmit->ConfigData.StationAddress.Addr[0], gSocketTransmit->ConfigData.StationAddress.Addr[1],
-                    gSocketTransmit->ConfigData.StationAddress.Addr[2], gSocketTransmit->ConfigData.StationAddress.Addr[3]);
-        cJSON_AddStringToObject(Tree, "IP", gBuffer);
-        cJSON_AddStringToObject(Tree, "SN", gSystemInfo.szSerialNumber);
-        cJSON_AddNumberToObject(Tree, "TYPE", 0);
-        cJSON_AddNumberToObject(Tree, "SLOTS", g_numSMBIOSMem);
-        cJSON_AddNumberToObject(Tree, "STATUS", 0);
     } else if (AsciiStrnCmp("areyouok", Cmd->valuestring, 8) == 0) {
         cJSON_AddBoolToObject(Tree, "SUCCESS", true);
         // 关键：MAC/IP 来自“当前接收该包的 NIC”
