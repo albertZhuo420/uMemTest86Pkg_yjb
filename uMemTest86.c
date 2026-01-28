@@ -721,7 +721,7 @@ BOOLEAN gDebugMode = TRUE;
 UINTN gVerbosity = 0;
 
 char gBuffer[BUF_SIZE];
-CHAR16 g_wszBuffer[BUF_SIZE];
+CHAR16 g_wszBuffer[BUF_SIZE]; // 这个似乎是专门用来debug的
 
 /* HW details */
 struct cpu_ident cpu_id; // results of execution cpuid instruction

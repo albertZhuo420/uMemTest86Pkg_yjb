@@ -116,7 +116,10 @@ typedef struct {
 
 #pragma pack()
 
-typedef BOOLEAN(EFIAPI *OKN_IS_DIMM_PRESENT)(IN UINT8 Socket, IN UINT8 Channel, IN UINT8 Dimm);
+typedef EFI_STATUS(EFIAPI *OKN_IS_DIMM_PRESENT)(IN UINT8     Socket,
+                                                IN UINT8     Channel,
+                                                IN UINT8     Dimm,
+                                                OUT BOOLEAN *pPresent);
 typedef EFI_STATUS(EFIAPI *OKN_GET_MEM_CONFIG)(OUT OKN_MEMORY_CONFIGURATION *Config);
 typedef EFI_STATUS(EFIAPI *OKN_GET_MEM_CONFIG_REAL)(OUT OKN_MEMORY_CONFIGURATION *Config);
 typedef EFI_STATUS(EFIAPI *OKN_SET_MEM_CONFIG)(IN CONST OKN_MEMORY_CONFIGURATION *Config);
@@ -146,19 +149,19 @@ typedef EFI_STATUS(EFIAPI *OKN_ADDRESS_SYSTEM_TO_DIMM)(IN UINTN                 
                                                        OUT DIMM_ADDRESS_DETAIL *TranslatedAddress);
 
 typedef struct {
-  UINT32                      Revision;
-  OKN_IS_DIMM_PRESENT         IsDimmPresent;
+  UINT32                      Revision;          // XX
+  OKN_IS_DIMM_PRESENT         IsDimmPresent;     // Done
   OKN_GET_MEM_CONFIG          GetMemConfig;      // Done
   OKN_GET_MEM_CONFIG_REAL     GetMemConfigReal;  // Done
   OKN_SET_MEM_CONFIG          SetMemConfig;      // Done
-  OKN_GET_AMT_CONFIG          GetAmtConfig; // 是不是需要针对具体的AMT测试项来实现这个函数, 该函数接口应该需要加一个传入参数
+  OKN_GET_AMT_CONFIG          GetAmtConfig;  // 需要针对具体的AMT测试项来实现这个函数? 该函数接口应该需要加一个传入参数
   OKN_SET_AMT_CONFIG          SetAmtConfig;  // Done
-  OKN_GET_MEM_DISABLED_REASON GetDisReason; 
-  OKN_GET_DIMM_TEMP           GetDimmTemp; 
-  OKN_INJECT_PPR              InjectPpr;
-  OKN_SPD_READ                SpdRead;  // Done
-  OKN_SPD_WRITE               SpdWrite;
-  OKN_ADDRESS_SYSTEM_TO_DIMM  AddrSys2Dimm;
+  OKN_GET_MEM_DISABLED_REASON GetDisReason;  // Done DIMM_RANK_MAP_OUT_REASON
+  OKN_GET_DIMM_TEMP           GetDimmTemp;   // Done
+  OKN_INJECT_PPR              InjectPpr;     // XX
+  OKN_SPD_READ                SpdRead;       // Done
+  OKN_SPD_WRITE               SpdWrite;      // XX
+  OKN_ADDRESS_SYSTEM_TO_DIMM  AddrSys2Dimm;  // Done
 } OKN_MEMORY_TEST_PROTOCOL;
 
 #endif  // _OKN_MEM_TEST_PROTOCOL_H_
