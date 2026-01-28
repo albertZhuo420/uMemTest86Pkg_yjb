@@ -32,6 +32,7 @@ VOID JsonHandler(cJSON *Tree)
   if (!Cmd || Cmd->type != cJSON_String) {
     return;
   }
+ 
   if (AsciiStrnCmp("testStatus", Cmd->valuestring, 10) == 0) {
     cJSON *ErrorInfo = cJSON_AddArrayToObject(Tree, "ERRORINFO");
     cJSON_AddNumberToObject(Tree, "TID", gTestTid);
@@ -272,6 +273,7 @@ VOID JsonHandler(cJSON *Tree)
   else if (AsciiStrnCmp("amtStart", Cmd->valuestring, 8) == 0) {
     amtControl(Tree, TRUE);
   }
+  
   return;
 }
 
@@ -306,7 +308,7 @@ EFI_STATUS OknMT_ProcessJsonCmd_HwInfo(IN OKN_MEMORY_TEST_PROTOCOL *pProto, IN O
     SmbiosHandle = SMBIOS_HANDLE_PI_RESERVED;
     SmbiosType   = EFI_SMBIOS_TYPE_PROCESSOR_INFORMATION;
     Status       = gBS->LocateProtocol(&gEfiSmbiosProtocolGuid, NULL, (VOID **)&pSmbios);
-    if (Status == 0) {
+    if (EFI_SUCCESS == Status) {
       while (1) {
         Status = pSmbios->GetNext(pSmbios,
                                   &SmbiosHandle,
@@ -331,7 +333,7 @@ EFI_STATUS OknMT_ProcessJsonCmd_HwInfo(IN OKN_MEMORY_TEST_PROTOCOL *pProto, IN O
   // 3. SLOT_CNT
   cJSON_AddNumberToObject(pJsTree, "SMBIOS_MEM_DEV_CNT", g_numSMBIOSMem);
 
-  // 3. 获取DIMM信息
+  // 4. 获取DIMM信息
   cJSON *DimmInfoArray = cJSON_AddArrayToObject(pJsTree, "DIMM_INFO");
   for (UINT8 i = 0; i < g_numSMBIOSMem; i++) {
     cJSON *Info = cJSON_CreateObject();
@@ -342,14 +344,14 @@ EFI_STATUS OknMT_ProcessJsonCmd_HwInfo(IN OKN_MEMORY_TEST_PROTOCOL *pProto, IN O
 
     BOOLEAN                  RamPresent    = FALSE;
     UINT8                    Online        = 0;
-    INT32                    RamTemp0      = OKN_MAGIC_ERR_NUM;
+    INT32                    RamTemp0      = OKN_MAGIC_NUMBER;
     INT32                    RamTemp1      = 0;
     INT32                    HubTemp       = 0;
     DIMM_RANK_MAP_OUT_REASON MapOutReason  = DimmRankMapOutMax;
-    INT32                    SdramDevWidth = OKN_MAGIC_ERR_NUM;  // SDRAM Device Width
-    INT32                    PkgRanksCnt   = OKN_MAGIC_ERR_NUM;  // Number of Package Ranks per DIMM
-    INT32                    SdramPkgCnt   = OKN_MAGIC_ERR_NUM;  // SDRAM Chip Count, 不含ECC
-    INT32                    EccPkgCnt     = OKN_MAGIC_ERR_NUM;  // ECC Chip Count
+    INT32                    SdramDevWidth = OKN_MAGIC_NUMBER;  // SDRAM Device Width
+    INT32                    PkgRanksCnt   = OKN_MAGIC_NUMBER;  // Number of Package Ranks per DIMM
+    INT32                    SdramPkgCnt   = OKN_MAGIC_NUMBER;  // SDRAM Chip Count, 不含ECC
+    INT32                    EccPkgCnt     = OKN_MAGIC_NUMBER;  // ECC Chip Count
 
     Status = pProto->IsDimmPresent(Socket, Channel, Dimm, &RamPresent);
     if (FALSE == EFI_ERROR(Status)) {  // 在线
@@ -370,12 +372,10 @@ EFI_STATUS OknMT_ProcessJsonCmd_HwInfo(IN OKN_MEMORY_TEST_PROTOCOL *pProto, IN O
           OknDdr4SpdEstimateTotalEccPackages(SpdData, DDR4_SPD_LEN, (UINT8 *)&EccPkgCnt);
         }
         else {
+          // clang-format off
           Print(L"[OKN_UEFI_ERR] [%s] SpdRead() failed for Skt %d Ch %d Dimm %d: %r\n",
-                __func__,
-                Socket,
-                Channel,
-                Dimm,
-                Status);
+                __func__, Socket, Channel, Dimm, Status);
+          // clang-format on
         }
       }  // if (TRUE == RamPresent)
     }  //  if (FALSE == EFI_ERROR(Status))

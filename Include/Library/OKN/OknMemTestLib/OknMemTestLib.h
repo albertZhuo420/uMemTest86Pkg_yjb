@@ -10,7 +10,7 @@
 #include <Library/OKN/PortingLibs/cJSONLib.h>
 #include <Library/UefiLib.h>  // Print
 
-#define OKN_MAGIC_ERR_NUM 9527
+#define OKN_MAGIC_NUMBER 9527
 
 /**
  * 这些函数要不要加EFIAPI? 以后再进一步研究吧
@@ -26,10 +26,10 @@ extern EFI_HANDLE                gOknChosenHandle;
  * 探测到的 TSOD 模块数量, DIMM 上温度传感器/TSOD hub 可读到的条目数
  * uMemTest86Pkg/SupportLib.c->MtSupportGetTSODInfo()->switch (g_TSODController[i].tsodDriver)分支中
  * 的函数通过 g_numTSODModules++ 来统计探测到的 TSOD 模块数量;
- * 也就是说：TSOD 的探测是通过扫描 g_TSODController[] 上的 SMBus/TSOD 控制器，然后调用 smbGetTSOD...()
- * 系列函数，最终把结果写入全局:
- *   - g_numTSODModules：总数;
- *   - g_MemTSODInfo[]：每个模块的 channel/slot/temperature/raw...
+ * 也就是说: TSOD 的探测是通过扫描 g_TSODController[] 上的 SMBus/TSOD 控制器, 然后调用 smbGetTSOD...()
+ * 系列函数, 最终把结果写入全局:
+ *   - g_numTSODModules: 总数;
+ *   - g_MemTSODInfo[]: 每个模块的 channel/slot/temperature/raw...
  */
 extern int g_numTSODModules;
 extern int g_numSMBIOSMem;  // Num of SMBIOS memory devices, 在smbios_mem_info()中被赋值
