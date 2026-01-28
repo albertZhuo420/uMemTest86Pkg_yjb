@@ -1,4 +1,4 @@
-#include <Library/OKN/OknDDR4SpdLib/OknDDR4SpdLib.h>
+#include <Library/OKN/OknDdr4SpdLib/OknDdr4SpdLib.h>
 
 STATIC EFI_STATUS OknDdr4SpdReadByte(IN CONST UINT8 *Spd, IN UINTN SpdLen, IN UINTN Offset, OUT UINT8 *Value)
 {

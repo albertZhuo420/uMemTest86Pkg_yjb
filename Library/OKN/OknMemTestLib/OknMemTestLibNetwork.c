@@ -3,16 +3,16 @@
  *
  */
 
-#include <Library/OKN/OknDDR4SpdLib/OknDDR4SpdLib.h>
+#include <Library/OKN/OknDdr4SpdLib/OknDdr4SpdLib.h>
 #include <Library/OKN/OknMemTestLib/OknMemTestLib.h>
 #include <Protocol/Smbios.h>
 
 /**
  * UDP4 Rx (Udp4ReceiveHandler)
  *    ├─ cJSON_ParseWithLength(udp_payload)  -> Tree
- *    ├─ JsonHandler(Tree)                  -> 在 Tree 里加返回字段 / 改全局状态
- *    ├─ cJSON_PrintUnformatted(Tree)       -> JSON response string
- *    └─ UDP4 Tx (gSocketTransmit->Transmit) 回发给上位机
+ *    ├─ JsonHandler(Tree)                   -> 在 Tree 里加返回字段 / 改全局状态
+ *    ├─ cJSON_PrintUnformatted(Tree)        -> JSON response string
+ *    └─ UDP4 Tx (gSocketTransmit->Transmit) -> 回发给上位机
  */
 
 #define OKN_BUF_SIZE 1024

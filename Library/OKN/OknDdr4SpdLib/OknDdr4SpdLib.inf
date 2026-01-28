@@ -1,30 +1,30 @@
 ## @file
-#  OKN DDR4 SPD parser library (OknDDR4SpdLib)
+#  OKN DDR4 SPD parser library (OknDdr4SpdLib)
 #
 #  提供：Ddr4SpdIsRankMixAsymmetrical / Ddr4SpdGetSdramDeviceWidthBits / ...
 #
 #  说明：
 #    - 这是一个 EDK II Library INF 示例
-#    - 把本文件放到例如：YourPkg/Library/OknDDR4SpdLib/OknDDR4SpdLib.inf
-#    - 同目录放: OknDDR4SpdLib.c / OknDDR4SpdLib.h
+#    - 把本文件放到例如：YourPkg/Library/OknDdr4SpdLib/OknDdr4SpdLib.inf
+#    - 同目录放: OknDdr4SpdLib.c / OknDdr4SpdLib.h
 ##
 
 [Defines]
   INF_VERSION                    = 0x0001001B
-  BASE_NAME                      = OknDDR4SpdLib
+  BASE_NAME                      = OknDdr4SpdLib
   FILE_GUID                      = D39AE705-4CE3-4B5C-8C26-6E7EB50AAC2A
   MODULE_TYPE                    = BASE
   VERSION_STRING                 = 1.0
-  LIBRARY_CLASS                  = OknDDR4SpdLib
+  LIBRARY_CLASS                  = OknDdr4SpdLib
 
 #
 #  如果你的库未来要区分不同 MODULE_TYPE 的消费者，也可以写成：
-#  LIBRARY_CLASS = OknDDR4SpdLib|BASE,DXE_DRIVER,UEFI_DRIVER,UEFI_APPLICATION
+#  LIBRARY_CLASS = OknDdr4SpdLib|BASE,DXE_DRIVER,UEFI_DRIVER,UEFI_APPLICATION
 #
 
 [Sources]
-  OknDDR4SpdLib.c
-  OknDDR4SpdLib.h
+  OknDdr4SpdLib.c
+  OknDdr4SpdLib.h
 
 [Packages]
   MdePkg/MdePkg.dec
