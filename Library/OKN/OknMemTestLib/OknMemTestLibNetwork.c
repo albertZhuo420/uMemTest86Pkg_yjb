@@ -5,24 +5,28 @@
 
 #include <Library/OKN/OknDdr4SpdLib/OknDdr4SpdLib.h>
 #include <Library/OKN/OknMemTestLib/OknMemTestLib.h>
+#include <Library/OKN/PortingLibs/Udp4SocketLib.h>
 #include <Protocol/Smbios.h>
+#include <uMemTest86.h>
 
 /**
  * UDP4 Rx (Udp4ReceiveHandler)
  *    ├─ cJSON_ParseWithLength(udp_payload)  -> Tree
  *    ├─ JsonHandler(Tree)                   -> 在 Tree 里加返回字段 / 改全局状态
  *    ├─ cJSON_PrintUnformatted(Tree)        -> JSON response string
- *    └─ UDP4 Tx (gSocketTransmit->Transmit) -> 回发给上位机
+ *    └─ UDP4 Tx (gOknUdpSocketTransmit->Transmit) -> 回发给上位机
  */
 
-#define OKN_BUF_SIZE 1024
-char gOknAsciiSPrintBuffer[OKN_BUF_SIZE];
+UINTN gOknLastPercent;  // 用在uMemTest86Pkg/Ui.c 文件中: mLastPercent;
 
-// extern UINT8 mSpdTableDDR[8][2][1024];
-extern UINT8 mSpdTableDDR[8][2][2][1024];
+BOOLEAN              gOKnSkipWaiting = FALSE;
+BOOLEAN              gOknTestStart   = FALSE;
+BOOLEAN              gOknTestPause   = FALSE;
+UINT8                gOknTestReset   = 0xff;
+OKN_TEST_STATUS_TYPE gOknTestStatus  = OKN_TST_Unknown;
+INT8                 gOknMT86TestID  = -1;               // 这个是MT86真实的TestID [0 ... 15]
 
-extern VOID EFIAPI UnlockAllMemRanges(VOID);
-extern VOID EFIAPI LockAllMemRanges(VOID);
+CHAR8 gOknAsciiSPrintBuffer[OKN_BUF_SIZE];
 
 VOID JsonHandler(cJSON *Tree)
 {
@@ -32,10 +36,9 @@ VOID JsonHandler(cJSON *Tree)
   if (!Cmd || Cmd->type != cJSON_String) {
     return;
   }
- 
+
   if (AsciiStrnCmp("testStatus", Cmd->valuestring, 10) == 0) {
     cJSON *ErrorInfo = cJSON_AddArrayToObject(Tree, "ERRORINFO");
-    cJSON_AddNumberToObject(Tree, "TID", gTestTid);
     cJSON_AddNumberToObject(Tree, "DataMissCompare", MtSupportGetNumErrors());
     cJSON_AddNumberToObject(Tree, "CorrError", MtSupportGetNumCorrECCErrors());
     cJSON_AddNumberToObject(Tree, "UncorrError", MtSupportGetNumUncorrECCErrors());
@@ -43,47 +46,46 @@ VOID JsonHandler(cJSON *Tree)
     DIMM_ADDRESS_DETAIL *Item = NULL;
 
     for (UINT8 i = 0; i < 4; i++) {
-      Item = DequeueError(&gDimmErrorQueue);
+      Item = DequeueError(&gOknDimmErrorQueue);
       if (!Item) {
         break;
       }
       cJSON *Detail = cJSON_CreateObject();
-      cJSON_AddNumberToObject(Detail, "Socket", Item->SocketId);
-      cJSON_AddNumberToObject(Detail, "MemCtrl", Item->MemCtrlId);
-      cJSON_AddNumberToObject(Detail, "Channel", Item->MemCtrlId * 2 + Item->ChannelId);
+      cJSON_AddNumberToObject(Detail, "Socket", Item.SocketId);
+      cJSON_AddNumberToObject(Detail, "MemCtrl", Item.MemCtrlId);
+      cJSON_AddNumberToObject(Detail, "Channel", Item.MemCtrlId * 2 + Item.ChannelId);
       cJSON_AddNumberToObject(Detail, "Dimm", 0);
-      cJSON_AddNumberToObject(Detail, "Rank", Item->RankId);
-      cJSON_AddNumberToObject(Detail, "SubCh", Item->SubChId);
-      cJSON_AddNumberToObject(Detail, "BG", Item->BankGroup);
-      cJSON_AddNumberToObject(Detail, "Bank", Item->Bank);
-      cJSON_AddNumberToObject(Detail, "Row", Item->Row);
-      cJSON_AddNumberToObject(Detail, "Col", Item->Column);
+      cJSON_AddNumberToObject(Detail, "Rank", Item.RankId);
+      cJSON_AddNumberToObject(Detail, "SubCh", Item.SubChId);
+      cJSON_AddNumberToObject(Detail, "BG", Item.BankGroup);
+      cJSON_AddNumberToObject(Detail, "Bank", Item.Bank);
+      cJSON_AddNumberToObject(Detail, "Row", Item.Row);
+      cJSON_AddNumberToObject(Detail, "Col", Item.Column);
       cJSON_AddItemToArray(ErrorInfo, Detail);
     }
 
-    GetStringById(STRING_TOKEN(gCustomTestList[gTestNum].NameStrId), g_wszBuffer, BUF_SIZE);
-    UnicodeStrToAsciiStrS(g_wszBuffer, gBuffer, BUF_SIZE);
-    cJSON_AddStringToObject(Tree, "NAME", gBuffer);
-    cJSON_AddNumberToObject(Tree, "ID", gTestNum + 47);
+    CHAR16 UnicodeBuf[OKN_BUF_SIZE] = {0};
+    CHAR8  AsciiBuf[OKN_BUF_SIZE]   = {0};
+    GetStringById(STRING_TOKEN(gCustomTestList[gOknMT86TestID].NameStrId), UnicodeBuf, BUF_SIZE);
+    UnicodeStrToAsciiStrS(UnicodeBuf, AsciiBuf, OKN_BUF_SIZE);
+    cJSON_AddStringToObject(Tree, "NAME", AsciiBuf);
+    cJSON_AddNumberToObject(Tree, "ID", gOknMT86TestID + 47);
     switch (mPatternUI.NewSize) {
-      case 4: AsciiSPrint(gBuffer, BUF_SIZE, "0x%08X", mPatternUI.NewPattern[0]); break;
-      case 8: AsciiSPrint(gBuffer, BUF_SIZE, "0x%016lX", *((UINT64 *)mPatternUI.NewPattern)); break;
-      case 16: AsciiSPrint(gBuffer, BUF_SIZE, "0x%08X%08X", mPatternUI.NewPattern[0], mPatternUI.NewPattern[1]); break;
+      case 4:  AsciiSPrint(AsciiBuf, OKN_BUF_SIZE, "0x%08X", mPatternUI.NewPattern[0]); break;
+      case 8:  AsciiSPrint(AsciiBuf, OKN_BUF_SIZE, "0x%016lX", *((UINT64 *)mPatternUI.NewPattern)); break;
+      case 16: AsciiSPrint(AsciiBuf, OKN_BUF_SIZE, "0x%08X%08X", mPatternUI.NewPattern[0], mPatternUI.NewPattern[1]); break;
     }
-    cJSON_AddStringToObject(Tree, "PATTERN", gBuffer);
-    cJSON_AddNumberToObject(Tree, "PROGRESS", gLastPercent);
+    cJSON_AddStringToObject(Tree, "PATTERN_NEW", gBuffer);
+    cJSON_AddNumberToObject(Tree, "PROGRESS", gOknLastPercent);
     // cJSON_AddNumberToObject(Tree, "MEMSTART", gStartAddr);
     // cJSON_AddNumberToObject(Tree, "MEMEND", gEndAddr);
-    cJSON_AddNumberToObject(Tree, "STATUS", gTestStatus);
+    cJSON_AddNumberToObject(Tree, "STATUS", gOknTestStatus);
   }
   else if (AsciiStrnCmp("testStart", Cmd->valuestring, 9) == 0) {
-    gLastPercent = 0;
-    InitErrorQueue(&gDimmErrorQueue);
-    gTestPause = FALSE;
-    cJSON *Tid = cJSON_GetObjectItemCaseSensitive(Tree, "TID");
-    if (Tid) {
-      gTestTid = (UINT8)Tid->valueu64;
-    }
+    gOknLastPercent = 0;
+    InitErrorQueue(&gOknDimmErrorQueue);
+    gOknTestPause = FALSE;
+
     cJSON *Id = cJSON_GetObjectItemCaseSensitive(Tree, "ID");
     if (Id == NULL || Id->type != cJSON_Number || Id->valueu64 > gNumCustomTests + 47 || Id->valueu64 < 47) {
       return;
@@ -92,12 +94,12 @@ VOID JsonHandler(cJSON *Tree)
       gCustomTestList[i].Enabled = FALSE;
     }
     gCustomTestList[Id->valueu64 - 47].Enabled = TRUE;
-    gTestNum                                   = (INT8)(Id->valueu64 - 47);
+    gOknMT86TestID                             = (INT8)(Id->valueu64 - 47);
     gNumPasses                                 = 1;
-    gTestStart                                 = TRUE;
-    gTestStatus                                = 1;
+    gOknTestStart                              = TRUE;
+    gOknTestStatus                             = 1;
 
-    cJSON_AddBoolToObject(Tree, "SUCCESS", gTestStart);
+    cJSON_AddBoolToObject(Tree, "SUCCESS", gOknTestStart);
     cJSON *SlotInfo = cJSON_AddArrayToObject(Tree, "SLOTINFO");
 
     UINT8 Online  = 0;
@@ -123,21 +125,21 @@ VOID JsonHandler(cJSON *Tree)
       cJSON_AddNumberToObject(Info, "RAMTEMP", RamTemp);
       cJSON_AddItemToArray(SlotInfo, Info);
     }
-    cJSON_AddNumberToObject(Tree, "STATUS", gTestStart);
+    cJSON_AddNumberToObject(Tree, "STATUS", gOknTestStart);
   }
   else if (AsciiStrnCmp("testStop", Cmd->valuestring, 8) == 0) {
     cJSON_AddBoolToObject(Tree, "SUCCESS", TRUE);
     MtSupportAbortTesting();
-    gTestStart  = FALSE;  // fix duplicate test
-    gTestStatus = 2;
+    gOknTestStart  = FALSE;  // fix duplicate test
+    gOknTestStatus = 2;
     // gTestStop = TRUE;
   }
   else if (AsciiStrnCmp("areyouok", Cmd->valuestring, 8) == 0) {
-    cJSON_AddBoolToObject(Tree, "SUCCESS", true);
+    cJSON_AddBoolToObject(Tree, "SUCCESS", TRUE);
     // 关键：MAC/IP 来自“当前接收该包的 NIC”
     if (gJsonCtxSocket != NULL) {
-      AsciiSPrint(gBuffer,
-                  BUF_SIZE,
+      AsciiSPrint(gOknAsciiSPrintBuffer,
+                  OKN_BUF_SIZE,
                   "%02x:%02x:%02x:%02x:%02x:%02x",
                   gJsonCtxSocket->NicMac[0],
                   gJsonCtxSocket->NicMac[1],
@@ -268,19 +270,196 @@ VOID JsonHandler(cJSON *Tree)
   }
   else if (AsciiStrnCmp("reset", Cmd->valuestring, 5) == 0) {
     cJSON *Type = cJSON_GetObjectItemCaseSensitive(Tree, "TYPE");
-    gTestReset  = (UINT8)Type->valueu64;
+    gOknTestReset  = (UINT8)Type->valueu64;
   }
   else if (AsciiStrnCmp("amtStart", Cmd->valuestring, 8) == 0) {
     amtControl(Tree, TRUE);
   }
-  
+
   return;
 }
 
 /**
- * 处理 HW_INFO 命令(原先的 connect命令)
+ * 处理 amtStart 命令 | 我要改成: SetAmtConfig
  */
-EFI_STATUS OknMT_ProcessJsonCmd_HwInfo(IN OKN_MEMORY_TEST_PROTOCOL *pProto, IN OUT cJSON *pJsTree)
+EFI_STATUS OknMT_ProcessJsonCmd_SetAmtConfig(IN OKN_MEMORY_TEST_PROTOCOL *pProto, IN CONST cJSON *pJsTree)
+{
+  EFI_STATUS Status = EFI_SUCCESS;
+
+  if (NULL == pProto || NULL == pJsTree) {
+    Print(L"[OKN_UEFI_ERR] [%s] Protocol or JSON tree is NULL\n", __func__);
+    return EFI_INVALID_PARAMETER;
+  }
+
+  Status = OknMT_SetAmtConfig(pProto, pJsTree);
+  if (TRUE == EFI_ERROR(Status)) {
+    Print(L"[OKN_UEFI_ERR] [%s] OknMT_SetAmtConfig() failed: %r\n", __func__, Status);
+    return Status;
+  }
+
+  return EFI_SUCCESS;
+}
+
+/**
+ * 处理 testStatus 命令 | 我要改成: MT86_Status
+ */
+EFI_STATUS OknMT_ProcessJsonCmd_MT86Status(OUT cJSON *pJsTree)
+{
+  EFI_STATUS Status = EFI_SUCCESS;
+
+  if (NULL == pJsTree) {
+    Print(L"[OKN_UEFI_ERR] [%s] JSON tree is NULL\n", __func__);
+    return EFI_INVALID_PARAMETER;
+  }
+  // 收集错误数量, 这些都是累加值
+  cJSON_AddNumberToObject(pJsTree, "DataMissCompare", MtSupportGetNumErrors());
+  cJSON_AddNumberToObject(pJsTree, "CorrError", MtSupportGetNumCorrECCErrors());
+  cJSON_AddNumberToObject(pJsTree, "UncorrError", MtSupportGetNumUncorrECCErrors());
+  cJSON_AddNumberToObject(pJsTree, "UnknownSlotError", MtSupportGetNumUnknownSlotErrors());
+
+  cJSON              *ErrorInfo = cJSON_AddArrayToObject(pJsTree, "ERRORINFO");
+  DIMM_ADDRESS_DETAIL Item;
+  for (UINT8 i = 0; i < 4; i++) {
+    ZeroMem(&Item, sizeof(DIMM_ADDRESS_DETAIL));
+
+    Status = OknMT_DequeueErrorCopy(&gOknDimmErrorQueue, &Item);
+    if (EFI_NOT_FOUND == Status) {
+      break;
+    }
+    cJSON *Detail = cJSON_CreateObject();
+    cJSON_AddNumberToObject(Detail, "Socket", Item.SocketId);
+    cJSON_AddNumberToObject(Detail, "MemCtrl", Item.MemCtrlId);
+    cJSON_AddNumberToObject(Detail, "Channel", Item.MemCtrlId * 2 + Item.ChannelId);
+    cJSON_AddNumberToObject(Detail, "Dimm", 0);
+    cJSON_AddNumberToObject(Detail, "Rank", Item.RankId);
+    cJSON_AddNumberToObject(Detail, "SubCh", Item.SubChId);
+    cJSON_AddNumberToObject(Detail, "BG", Item.BankGroup);
+    cJSON_AddNumberToObject(Detail, "Bank", Item.Bank);
+    cJSON_AddNumberToObject(Detail, "Row", Item.Row);
+    cJSON_AddNumberToObject(Detail, "Col", Item.Column);
+    cJSON_AddItemToArray(ErrorInfo, Detail);
+  }
+
+  CHAR16 UnicodeBuf[OKN_BUF_SIZE] = {0};
+  CHAR8  AsciiBuf[OKN_BUF_SIZE]   = {0};
+  GetStringById(STRING_TOKEN(gCustomTestList[gOknMT86TestID].NameStrId), UnicodeBuf, BUF_SIZE);
+  UnicodeStrToAsciiStrS(UnicodeBuf, AsciiBuf, OKN_BUF_SIZE);
+  cJSON_AddStringToObject(pJsTree, "NAME", AsciiBuf);
+  cJSON_AddNumberToObject(pJsTree, "ID", gOknMT86TestID + 47);
+  switch (mPatternUI.NewSize) {
+    case 4: AsciiSPrint(AsciiBuf, OKN_BUF_SIZE, "0x%08X", mPatternUI.NewPattern[0]); break;
+    case 8: AsciiSPrint(AsciiBuf, OKN_BUF_SIZE, "0x%016lX", *((UINT64 *)mPatternUI.NewPattern)); break;
+    case 16:
+      AsciiSPrint(AsciiBuf, OKN_BUF_SIZE, "0x%08X%08X", mPatternUI.NewPattern[0], mPatternUI.NewPattern[1]);
+      break;
+  }
+
+  cJSON_AddStringToObject(pJsTree, "PATTERN", AsciiBuf);
+  cJSON_AddNumberToObject(pJsTree, "PROGRESS", gOknLastPercent);
+  cJSON_AddNumberToObject(pJsTree, "STATUS", gOknTestStatus);
+
+  return EFI_SUCCESS;
+}
+
+/**
+ * 处理 testStop 命令 | 我要改成: MT86_Abort
+ */
+VOID OknMT_ProcessJsonCmd_MT86Abort(VOID)
+{
+  MtSupportAbortTesting();
+  gOknTestStart  = FALSE;  // fix duplicate test
+  gOknTestStatus = 2;
+
+  return;
+}
+
+/**
+ * 处理 testStart 命令 | 我要改成: MT86_Start
+ */
+EFI_STATUS OknMT_ProcessJsonCmd_MT86Start(IN cJSON *pJsTree)
+{
+  EFI_STATUS Status = EFI_SUCCESS;
+
+  if (NULL == pJsTree) {
+    Print(L"[OKN_UEFI_ERR] [%s] JSON tree is NULL\n", __func__);
+    return EFI_INVALID_PARAMETER;
+  }
+
+  gNumPasses      = 1;
+  gOknLastPercent = 0;
+  gOknTestPause   = FALSE;
+
+  OknMT_InitErrorQueue(&gOknDimmErrorQueue);
+
+  cJSON *Id = cJSON_GetObjectItemCaseSensitive(pJsTree, "ID");
+  if (Id == NULL || Id->type != cJSON_Number || Id->valueu64 > gNumCustomTests + 47 || Id->valueu64 < 47) {
+    Print(L"[OKN_UEFI_ERR] [%s] Invalid test ID\n", __func__);
+    return EFI_INVALID_PARAMETER;
+  }
+
+  for (UINT8 i = 0; i < gNumCustomTests; i++) {
+    gCustomTestList[i].Enabled = FALSE;
+  }
+  gCustomTestList[Id->valueu64 - 47].Enabled = TRUE;
+
+  gOknMT86TestID = (INT8)(Id->valueu64 - 47);  // ?
+  gOknTestStart  = TRUE;                       // ?
+  gOknTestStatus = 1;                          // ?
+
+  return EFI_SUCCESS;
+}
+/**
+ * 处理 areyouok 命令 | 我要改成: Reply_9527
+ */
+EFI_STATUS OknMT_ProcessJsonCmd_Reply9527(OUT cJSON *pJsTree)
+{
+  EFI_STATUS Status = EFI_SUCCESS;
+
+  if (NULL == pJsTree) {
+    Print(L"[OKN_UEFI_ERR] [%s] JSON tree is NULL\n", __func__);
+    return EFI_INVALID_PARAMETER;
+  }
+
+  // 关键：MAC/IP 来自“当前接收该包的 NIC”
+  if (gJsonCtxSocket != NULL) {
+    AsciiSPrint(gOknAsciiSPrintBuffer,
+                OKN_BUF_SIZE,
+                "%02x:%02x:%02x:%02x:%02x:%02x",
+                gJsonCtxSocket->NicMac[0],
+                gJsonCtxSocket->NicMac[1],
+                gJsonCtxSocket->NicMac[2],
+                gJsonCtxSocket->NicMac[3],
+                gJsonCtxSocket->NicMac[4],
+                gJsonCtxSocket->NicMac[5]);
+    cJSON_AddStringToObject(pJsTree, "MAC", gOknAsciiSPrintBuffer);
+
+    if (gJsonCtxSocket->NicIpValid) {
+      AsciiSPrint(gOknAsciiSPrintBuffer,
+                  OKN_BUF_SIZE,
+                  "%d.%d.%d.%d",
+                  gJsonCtxSocket->NicIp.Addr[0],
+                  gJsonCtxSocket->NicIp.Addr[1],
+                  gJsonCtxSocket->NicIp.Addr[2],
+                  gJsonCtxSocket->NicIp.Addr[3]);
+      cJSON_AddStringToObject(pJsTree, "IP", gOknAsciiSPrintBuffer);
+    }
+  }
+  else {
+    // 兜底：至少别填错
+    cJSON_AddStringToObject(pJsTree, "MAC", "00:00:00:00:00:00");
+    cJSON_AddStringToObject(pJsTree, "IP", "0.0.0.0");
+  }
+
+  AsciiSPrint(gOknAsciiSPrintBuffer, OKN_BUF_SIZE, "mt86-v%d.%d", PROGRAM_VERSION_MAJOR, PROGRAM_VERSION_MINOR);
+  cJSON_AddStringToObject(pJsTree, "MT86_FW", gOknAsciiSPrintBuffer);
+
+  return EFI_SUCCESS;
+}
+
+/**
+ * 处理 connect 命令 | 我要改成: HW_Info
+ */
+EFI_STATUS OknMT_ProcessJsonCmd_HwInfo(IN OKN_MEMORY_TEST_PROTOCOL *pProto, OUT cJSON *pJsTree)
 {
   EFI_STATUS Status = EFI_SUCCESS;
 
@@ -390,6 +569,110 @@ EFI_STATUS OknMT_ProcessJsonCmd_HwInfo(IN OKN_MEMORY_TEST_PROTOCOL *pProto, IN O
 
     cJSON_AddItemToArray(DimmInfoArray, Info);
   }
+
+  return EFI_SUCCESS;
+}
+
+/**
+ * 处理 readSPD 命令
+ */
+EFI_STATUS OknMT_ProcessJsonCmd_ReadSPD(IN OKN_MEMORY_TEST_PROTOCOL *pProto, IN OUT cJSON *pJsTree)
+{
+  EFI_STATUS Status = EFI_SUCCESS;
+
+  Status = OknMT_ReadSpdToJson(pProto, pJsTree);
+  if (TRUE == EFI_ERROR(Status)) {
+    Print(L"[OKN_UEFI_ERR] [%s] OknMT_ReadSpdToJson() failed: %r\n", __func__, Status);
+    return Status;
+  }
+
+  return EFI_SUCCESS;
+}
+
+/**
+ * 处理 testConfigGet 命令 | 我要改成: GetMemConfig
+ */
+EFI_STATUS OknMT_ProcessJsonCmd_GetMemConfig(IN OKN_MEMORY_TEST_PROTOCOL *pProto, OUT cJSON *pJsTree)
+{
+  EFI_STATUS Status = EFI_SUCCESS;
+
+  Status = OknMT_GetMemConfig(pProto, pJsTree);
+  if (TRUE == EFI_ERROR(Status)) {
+    Print(L"[OKN_UEFI_ERR] [%s] OknMT_GetMemConfig() failed: %r\n", __func__, Status);
+    return Status;
+  }
+
+  return EFI_SUCCESS;
+}
+
+/**
+ * 处理 testConfigActive 命令 | 我要改成: GetMemConfigReal
+ */
+EFI_STATUS OknMT_ProcessJsonCmd_GetMemConfigReal(IN OKN_MEMORY_TEST_PROTOCOL *pProto, OUT cJSON *pJsTree)
+{
+  EFI_STATUS Status = EFI_SUCCESS;
+
+  Status = OknMT_GetMemConfigReal(pProto, pJsTree);
+  if (TRUE == EFI_ERROR(Status)) {
+    Print(L"[OKN_UEFI_ERR] [%s] OknMT_GetMemConfigReal() failed: %r\n", __func__, Status);
+    return Status;
+  }
+
+  return EFI_SUCCESS;
+}
+
+/**
+ * 处理 testConfigSet 命令 | 我要改成: SetMemConfig
+ */
+EFI_STATUS OknMT_ProcessJsonCmd_SetMemConfig(IN OKN_MEMORY_TEST_PROTOCOL *pProto, IN CONST cJSON *pJsTree)
+{
+  EFI_STATUS Status = EFI_SUCCESS;
+
+  Status = OknMT_SetMemConfig(pProto, pJsTree);
+  if (TRUE == EFI_ERROR(Status)) {
+    Print(L"[OKN_UEFI_ERR] [%s] OknMT_SetMemConfig() failed: %r\n", __func__, Status);
+    return Status;
+  }
+
+  return EFI_SUCCESS;
+}
+
+/**
+ * 处理 reset 命令 | 我要改成: ResetSystem
+ * MdePkg/Include/Uefi/UefiMultiPhase.h有定义 EFI_RESET_TYPE;
+ */
+EFI_STATUS OknMT_ProcessJsonCmd_ResetSystem(IN OUT cJSON *pTree, OUT EFI_RESET_TYPE *pResetType)
+{
+  EFI_STATUS Status;
+  UINT32     TypeU32;
+
+  if (NULL == pTree || NULL == pResetType) {
+    Print(L"[OKN_UEFI_ERR] [%s] JSON tree or pResetType is NULL: %r\n", __func__, Status);
+    return EFI_INVALID_PARAMETER;
+  }
+
+  Status = JsonGetU32FromObject(pTree, "TYPE", &TypeU32);
+  if (EFI_ERROR(Status)) {
+    JsonSetBool(pTree, "SUCCESS", FALSE);
+    JsonSetString(pTree, "ERROR", "Missing/invalid TYPE (number 0..2)");
+    return Status;
+  }
+
+  // 只支持 0/1/2，不支持 3（PlatformSpecific）,因为那需要 ResetData GUID
+  if (TypeU32 > EfiResetShutdown) {  // EfiResetShutdown == 2
+    JsonSetBool(pTree, "SUCCESS", FALSE);
+    if (EfiResetPlatformSpecific == TypeU32) {
+      JsonSetString(pTree, "ERROR", "TYPE=3 (PlatformSpecific) not supported (GUID ResetData disabled by design)");
+      return EFI_UNSUPPORTED;
+    }
+    JsonSetString(pTree, "ERROR", "TYPE out of range (0=cold,1=warm,2=shutdown)");
+    return EFI_INVALID_PARAMETER;
+  }
+
+  *pResetType = (EFI_RESET_TYPE)TypeU32;
+
+  JsonSetNumber(pTree, "TYPE", (INTN)TypeU32);  // 规范化回显
+  JsonSetString(pTree, "ERROR", "");
 
   return EFI_SUCCESS;
 }

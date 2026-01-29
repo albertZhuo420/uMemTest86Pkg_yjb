@@ -171,8 +171,8 @@
 #include "images/ok.h"
 #include "images/qrcode.h"
 #include "images/qrcode_asus.h"
-#include <Library/OknPortingLibs/cJSONLib.h>
-#include <Library/OknPortingLibs/Udp4SocketLib.h>
+#include <Library/OKN/PortingLibs/cJSONLib.h>
+#include <Library/OKN/PortingLibs/Udp4SocketLib.h>
 #include <Library/BaseCryptLib.h>
 #include <Protocol/Smbios.h>
 
@@ -180,12 +180,7 @@
 
 #ifdef OKN_DDR4
 
-#define MAX_UDP4_RX_SOCKETS 16
 
-STATIC UDP4_SOCKET *gUdpRxSockets[MAX_UDP4_RX_SOCKETS];
-STATIC UINTN        gUdpRxSocketCount    = 0;
-STATIC UDP4_SOCKET *gUdpRxActiveSocket   = NULL;
-STATIC EFI_HANDLE   gUdpRxActiveSbHandle = NULL;
 
 STATIC VOID DisableUdpRxSocket(IN UDP4_SOCKET *Sock)
 {
@@ -206,7 +201,6 @@ STATIC EFI_STATUS StartUdp4ReceiveOnAllNics(IN EFI_UDP4_CONFIG_DATA *RxCfg);
 VOID EFIAPI Udp4ReceiveHandler(IN EFI_EVENT Event, IN VOID *Context);
 VOID EFIAPI Udp4NullHandler(IN EFI_EVENT Event, IN VOID *Context);
 
-STATIC UDP4_SOCKET *gJsonCtxSocket = NULL;
 
 // TX 完成后释放本次发送申请的内存, 避免泄漏
 STATIC VOID EFIAPI Udp4TxFreeHandler(IN EFI_EVENT Event, IN VOID *Context)
@@ -1572,7 +1566,6 @@ struct PAT_UI {
 	UINT8 CurSize;
 	UINT8 NewSize;
 };
-extern UINTN            gLastPercent;
 extern struct PAT_UI mPatternUI;
 CONST UINT8  Aes128CbcKey[] = {
   0xc2, 0x86, 0x69, 0x6d, 0x88, 0x7c, 0x9a, 0xa0, 0x61, 0x1b, 0xbb, 0x3e, 0x20, 0x25, 0xa4, 0x5a
@@ -1584,16 +1577,6 @@ CONST UINT8  Aes128CbcIvec[] = {
 VOID *gAesContext;
 
 // #define AES_ENABLE
-UDP4_SOCKET *gSocketTransmit = NULL;
-BOOLEAN gSkipWaiting = FALSE;
-BOOLEAN gTestStart = FALSE;
-BOOLEAN gTestPause = FALSE;
-// BOOLEAN gTestStop = FALSE;
-UINT8 gTestReset = 0xff;
-// 0:end 1:testing 2:abort
-UINT8 gTestStatus = 0xff;
-INT8   gTestNum = -1;
-UINT8  gTestTid = 0;
 
 //OKN_20240829_yjb >>
 EFI_STATUS
@@ -1638,7 +1621,6 @@ VOID JsonHandler(cJSON *Tree)
         return;
     if (AsciiStrnCmp("testStatus", Cmd->valuestring, 10) == 0) {
         cJSON *ErrorInfo = cJSON_AddArrayToObject(Tree, "ERRORINFO");
-        cJSON_AddNumberToObject(Tree, "TID", gTestTid);
         cJSON_AddNumberToObject(Tree, "DataMissCompare", MtSupportGetNumErrors());
         cJSON_AddNumberToObject(Tree, "CorrError", MtSupportGetNumCorrECCErrors());
         cJSON_AddNumberToObject(Tree, "UncorrError", MtSupportGetNumUncorrECCErrors());
@@ -1649,14 +1631,14 @@ VOID JsonHandler(cJSON *Tree)
 
 
         // static UINTN addddd = 0x12345678;
-        // if (gDimmErrorQueue.Head == gDimmErrorQueue.Tail) {
+        // if (gOknDimmErrorQueue.Head == gOknDimmErrorQueue.Tail) {
         //     DIMM_ADDRESS_DETAIL NewItem = {addddd++, 0, 0, 0, 0, 0, 0, 0, 0, 0x10, 0x20, 2};
-        //     EnqueueError(&gDimmErrorQueue, &NewItem);
+        //     EnqueueError(&gOknDimmErrorQueue, &NewItem);
         // }
 
 
         for (UINT8 i = 0; i < 4; i++) {
-            Item = DequeueError(&gDimmErrorQueue);
+            Item = DequeueError(&gOknDimmErrorQueue);
             if (!Item) {
                 break;
             }
@@ -1704,10 +1686,10 @@ VOID JsonHandler(cJSON *Tree)
             }
         }
 #endif
-        GetStringById(STRING_TOKEN(gCustomTestList[gTestNum].NameStrId), g_wszBuffer, BUF_SIZE);
+        GetStringById(STRING_TOKEN(gCustomTestList[gOknMT86TestID].NameStrId), g_wszBuffer, BUF_SIZE);
         UnicodeStrToAsciiStrS(g_wszBuffer, gBuffer, BUF_SIZE);
         cJSON_AddStringToObject(Tree, "NAME", gBuffer);
-        cJSON_AddNumberToObject(Tree, "ID", gTestNum + 47);
+        cJSON_AddNumberToObject(Tree, "ID", gOknMT86TestID + 47);
         switch (mPatternUI.NewSize)
         {
         case 4:
@@ -1721,18 +1703,15 @@ VOID JsonHandler(cJSON *Tree)
             break;
         }
         cJSON_AddStringToObject(Tree, "PATTERN", gBuffer);
-        cJSON_AddNumberToObject(Tree, "PROGRESS", gLastPercent);
+        cJSON_AddNumberToObject(Tree, "PROGRESS", gOknLastPercent);
         // cJSON_AddNumberToObject(Tree, "MEMSTART", gStartAddr);
         // cJSON_AddNumberToObject(Tree, "MEMEND", gEndAddr);
-        cJSON_AddNumberToObject(Tree, "STATUS", gTestStatus);
+        cJSON_AddNumberToObject(Tree, "STATUS", gOknTestStatus);
     } else if (AsciiStrnCmp("testStart", Cmd->valuestring, 9) == 0) {
-        gLastPercent = 0;
-        InitErrorQueue(&gDimmErrorQueue);
-        gTestPause = FALSE;
-        cJSON *Tid = cJSON_GetObjectItemCaseSensitive(Tree, "TID");
-        if (Tid) {
-            gTestTid = (UINT8)Tid->valueu64;
-        }
+        gOknLastPercent = 0;
+        InitErrorQueue(&gOknDimmErrorQueue);
+        gOknTestPause = FALSE;
+
         cJSON *Id = cJSON_GetObjectItemCaseSensitive(Tree, "ID");
         if (Id == NULL || Id->type != cJSON_Number || Id->valueu64 > gNumCustomTests + 47 || Id->valueu64 < 47) {
             return;
@@ -1741,12 +1720,12 @@ VOID JsonHandler(cJSON *Tree)
             gCustomTestList[i].Enabled = FALSE;
         }
         gCustomTestList[Id->valueu64 - 47].Enabled = TRUE;
-        gTestNum = (INT8)(Id->valueu64 - 47);
+        gOknMT86TestID = (INT8)(Id->valueu64 - 47);
         gNumPasses = 1;
-        gTestStart = TRUE;
-        gTestStatus = 1;
+        gOknTestStart = TRUE;
+        gOknTestStatus = 1;
 
-        cJSON_AddBoolToObject(Tree, "SUCCESS", gTestStart);
+        cJSON_AddBoolToObject(Tree, "SUCCESS", gOknTestStart);
         cJSON *SlotInfo = cJSON_AddArrayToObject(Tree, "SLOTINFO");
 
         UINT8 Online = 0;
@@ -1771,13 +1750,13 @@ VOID JsonHandler(cJSON *Tree)
             cJSON_AddNumberToObject(Info, "RAMTEMP", RamTemp);
             cJSON_AddItemToArray(SlotInfo, Info);
         }
-        cJSON_AddNumberToObject(Tree, "STATUS", gTestStart);
+        cJSON_AddNumberToObject(Tree, "STATUS", gOknTestStart);
         
     } else if (AsciiStrnCmp("testStop", Cmd->valuestring, 8) == 0) {
         cJSON_AddBoolToObject(Tree, "SUCCESS", TRUE);
         MtSupportAbortTesting();
-        gTestStart = FALSE;   // fix duplicate test
-        gTestStatus = 2;
+        gOknTestStart = FALSE;   // fix duplicate test
+        gOknTestStatus = 2;
         // gTestStop = TRUE;
     } else if (AsciiStrnCmp("areyouok", Cmd->valuestring, 8) == 0) {
         cJSON_AddBoolToObject(Tree, "SUCCESS", true);
@@ -1885,7 +1864,7 @@ VOID JsonHandler(cJSON *Tree)
         regRead(Tree);
     } else if (AsciiStrnCmp("reset", Cmd->valuestring, 5) == 0) {
         cJSON *Type = cJSON_GetObjectItemCaseSensitive(Tree, "TYPE");
-        gTestReset = (UINT8)Type->valueu64;
+        gOknTestReset = (UINT8)Type->valueu64;
     } else if (AsciiStrnCmp("amtStart", Cmd->valuestring, 8) == 0) {
         amtControl(Tree, TRUE);
     } else if (AsciiStrnCmp("amtStop", Cmd->valuestring, 7) == 0) {
@@ -2106,7 +2085,7 @@ VOID EFIAPI Udp4ReceiveHandler(IN EFI_EVENT  Event,  IN VOID *Context)
   }
 
   // Lazily create TX socket on the selected NIC.
-  if (gSocketTransmit == NULL && gUdpRxActiveSbHandle != NULL) {
+  if (gOknUdpSocketTransmit == NULL && gUdpRxActiveSbHandle != NULL) {
     EFI_UDP4_CONFIG_DATA TxCfg = {
       TRUE,   // AcceptBroadcast
       FALSE,  // AcceptPromiscuous
@@ -2131,23 +2110,23 @@ VOID EFIAPI Udp4ReceiveHandler(IN EFI_EVENT  Event,  IN VOID *Context)
                  &TxCfg,
                  (EFI_EVENT_NOTIFY)Udp4NullHandler,
                  (EFI_EVENT_NOTIFY)Udp4NullHandler,
-                 &gSocketTransmit);
+                 &gOknUdpSocketTransmit);
     if (EFI_ERROR(TxStatus)) {
       Print(L"[UDP] Create TX socket failed: %r\n", TxStatus);
-      gSocketTransmit = NULL;
+      gOknUdpSocketTransmit = NULL;
     }
   }
 
-  if (gSocketTransmit == NULL) {
+  if (gOknUdpSocketTransmit == NULL) {
     gBS->SignalEvent(RxData->RecycleSignal);
     Socket->Udp4->Receive(Socket->Udp4, &Socket->TokenReceive);
     return;
   }
 
-  gSocketTransmit->ConfigData.RemoteAddress = RxData->UdpSession.SourceAddress;
-  gSocketTransmit->ConfigData.RemotePort = RxData->UdpSession.SourcePort;
-  gSocketTransmit->Udp4->Configure(gSocketTransmit->Udp4, NULL);
-  gSocketTransmit->Udp4->Configure(gSocketTransmit->Udp4, &gSocketTransmit->ConfigData);
+  gOknUdpSocketTransmit->ConfigData.RemoteAddress = RxData->UdpSession.SourceAddress;
+  gOknUdpSocketTransmit->ConfigData.RemotePort = RxData->UdpSession.SourcePort;
+  gOknUdpSocketTransmit->Udp4->Configure(gOknUdpSocketTransmit->Udp4, NULL);
+  gOknUdpSocketTransmit->Udp4->Configure(gOknUdpSocketTransmit->Udp4, &gOknUdpSocketTransmit->ConfigData);
 #ifndef AES_ENABLE
   cJSON *Tree = NULL;
   Tree = cJSON_ParseWithLength(RxData->FragmentTable[0].FragmentBuffer, RxData->FragmentTable[0].FragmentLength);
@@ -2156,13 +2135,13 @@ VOID EFIAPI Udp4ReceiveHandler(IN EFI_EVENT  Event,  IN VOID *Context)
     JsonHandler(Tree);
     CHAR8 *JsonStr = cJSON_PrintUnformatted(Tree);
     UINT32 JsonStrLen = (UINT32)AsciiStrLen(JsonStr);
-    EFI_UDP4_TRANSMIT_DATA *TxData = gSocketTransmit->TokenTransmit.Packet.TxData;
+    EFI_UDP4_TRANSMIT_DATA *TxData = gOknUdpSocketTransmit->TokenTransmit.Packet.TxData;
     ZeroMem(TxData, sizeof(EFI_UDP4_TRANSMIT_DATA));
     TxData->DataLength = JsonStrLen;
     TxData->FragmentCount = 1;
     TxData->FragmentTable[0].FragmentLength = JsonStrLen;
     TxData->FragmentTable[0].FragmentBuffer = JsonStr;
-    gSocketTransmit->Udp4->Transmit(gSocketTransmit->Udp4, &gSocketTransmit->TokenTransmit);
+    gOknUdpSocketTransmit->Udp4->Transmit(gOknUdpSocketTransmit->Udp4, &gOknUdpSocketTransmit->TokenTransmit);
     cJSON_Delete(Tree);
   }
 #else
@@ -2182,13 +2161,13 @@ VOID EFIAPI Udp4ReceiveHandler(IN EFI_EVENT  Event,  IN VOID *Context)
         CopyMem(g_wszBuffer, JsonStr, JsonStrLen);
         Ok = AesCbcEncrypt(gAesContext, (UINT8 *)g_wszBuffer, InputSize, Aes128CbcIvec, (UINT8 *)gBuffer);
         if (Ok) {
-            EFI_UDP4_TRANSMIT_DATA *TxData = gSocketTransmit->TokenTransmit.Packet.TxData;
+            EFI_UDP4_TRANSMIT_DATA *TxData = gOknUdpSocketTransmit->TokenTransmit.Packet.TxData;
             ZeroMem(TxData, sizeof(EFI_UDP4_TRANSMIT_DATA));
             TxData->DataLength = InputSize;
             TxData->FragmentCount = 1;
             TxData->FragmentTable[0].FragmentLength = InputSize;
             TxData->FragmentTable[0].FragmentBuffer = gBuffer;
-            gSocketTransmit->Udp4->Transmit(gSocketTransmit->Udp4, &gSocketTransmit->TokenTransmit);
+            gOknUdpSocketTransmit->Udp4->Transmit(gOknUdpSocketTransmit->Udp4, &gOknUdpSocketTransmit->TokenTransmit);
         }
         cJSON_Delete(Tree);
     }
@@ -2259,7 +2238,7 @@ VOID EFIAPI Udp4ReceiveHandler(IN EFI_EVENT Event, IN VOID *Context)
 
   // 6) 懒创建 TX socket：只创建一次, 绑定到选中的 SB handle
   //    注意：NotifyTransmit 改为 Udp4TxFreeHandler, 用于释放本次发送的内存
-  if (gSocketTransmit == NULL && gUdpRxActiveSbHandle != NULL) {
+  if (gOknUdpSocketTransmit == NULL && gUdpRxActiveSbHandle != NULL) {
     EFI_UDP4_CONFIG_DATA TxCfg = {
       TRUE,   // AcceptBroadcast
       FALSE,  // AcceptPromiscuous
@@ -2285,20 +2264,20 @@ VOID EFIAPI Udp4ReceiveHandler(IN EFI_EVENT Event, IN VOID *Context)
                  &TxCfg,
                  (EFI_EVENT_NOTIFY)Udp4NullHandler,   // Tx socket 不需要 Receive 回调
                  (EFI_EVENT_NOTIFY)Udp4TxFreeHandler, // TX 完成释放资源: Udp4TxFreeHandler
-                 &gSocketTransmit);
+                 &gOknUdpSocketTransmit);
 
     if (EFI_ERROR(TxStatus)) {
       Print(L"[UDP] Create TX socket failed: %r\n", TxStatus);
-      gSocketTransmit = NULL;
+      gOknUdpSocketTransmit = NULL;
     } else {
       // 初始化 TX 内存追踪字段（需要你在 UDP4_SOCKET 结构体中加入这些字段）
-      gSocketTransmit->TxPayload    = NULL;
-      gSocketTransmit->TxSession    = NULL;
-      gSocketTransmit->TxInProgress = FALSE;
+      gOknUdpSocketTransmit->TxPayload    = NULL;
+      gOknUdpSocketTransmit->TxSession    = NULL;
+      gOknUdpSocketTransmit->TxInProgress = FALSE;
     }
   }
 
-  if (gSocketTransmit == NULL) {
+  if (gOknUdpSocketTransmit == NULL) {
     gBS->SignalEvent(RxData->RecycleSignal);
     Socket->TokenReceive.Packet.RxData = NULL;
     Socket->Udp4->Receive(Socket->Udp4, &Socket->TokenReceive);
@@ -2306,7 +2285,7 @@ VOID EFIAPI Udp4ReceiveHandler(IN EFI_EVENT Event, IN VOID *Context)
   }
 
   // 7) 若上一次发送还未完成（Token 仍挂起）, 为避免覆盖 Token/内存, 直接丢弃本次回复
-  if (gSocketTransmit->TxInProgress) {
+  if (gOknUdpSocketTransmit->TxInProgress) {
     gBS->SignalEvent(RxData->RecycleSignal);
     Socket->TokenReceive.Packet.RxData = NULL;
     Socket->Udp4->Receive(Socket->Udp4, &Socket->TokenReceive);
@@ -2344,7 +2323,7 @@ VOID EFIAPI Udp4ReceiveHandler(IN EFI_EVENT Event, IN VOID *Context)
           // 可选：如果你在 Socket 里保存了 DHCP IP, 可把源地址也填上
           // Sess->SourceAddress = Socket->NicIp;
 
-          EFI_UDP4_TRANSMIT_DATA *TxData = gSocketTransmit->TokenTransmit.Packet.TxData;
+          EFI_UDP4_TRANSMIT_DATA *TxData = gOknUdpSocketTransmit->TokenTransmit.Packet.TxData;
           ZeroMem(TxData, sizeof(EFI_UDP4_TRANSMIT_DATA));
           TxData->UdpSessionData = Sess;
           TxData->DataLength     = JsonStrLen;
@@ -2353,16 +2332,16 @@ VOID EFIAPI Udp4ReceiveHandler(IN EFI_EVENT Event, IN VOID *Context)
           TxData->FragmentTable[0].FragmentBuffer = Payload;
 
           // 记录待释放资源, TX 完成回调释放
-          gSocketTransmit->TxPayload    = Payload;
-          gSocketTransmit->TxSession    = Sess;
-          gSocketTransmit->TxInProgress = TRUE;
+          gOknUdpSocketTransmit->TxPayload    = Payload;
+          gOknUdpSocketTransmit->TxSession    = Sess;
+          gOknUdpSocketTransmit->TxInProgress = TRUE;
 
-          Status = gSocketTransmit->Udp4->Transmit(gSocketTransmit->Udp4, &gSocketTransmit->TokenTransmit);
+          Status = gOknUdpSocketTransmit->Udp4->Transmit(gOknUdpSocketTransmit->Udp4, &gOknUdpSocketTransmit->TokenTransmit);
           if (EFI_ERROR(Status)) {
             // 发送失败：立即释放并复位
-            gSocketTransmit->TxInProgress = FALSE;
-            if (gSocketTransmit->TxPayload) { FreePool(gSocketTransmit->TxPayload); gSocketTransmit->TxPayload = NULL; }
-            if (gSocketTransmit->TxSession) { FreePool(gSocketTransmit->TxSession); gSocketTransmit->TxSession = NULL; }
+            gOknUdpSocketTransmit->TxInProgress = FALSE;
+            if (gOknUdpSocketTransmit->TxPayload) { FreePool(gOknUdpSocketTransmit->TxPayload); gOknUdpSocketTransmit->TxPayload = NULL; }
+            if (gOknUdpSocketTransmit->TxSession) { FreePool(gOknUdpSocketTransmit->TxSession); gOknUdpSocketTransmit->TxSession = NULL; }
           }
         } else {
           FreePool(Payload);
@@ -2391,13 +2370,13 @@ VOID EFIAPI Udp4ReceiveHandler(IN EFI_EVENT Event, IN VOID *Context)
         CopyMem(g_wszBuffer, JsonStr, JsonStrLen);
         Ok = AesCbcEncrypt(gAesContext, (UINT8 *)g_wszBuffer, InputSize, Aes128CbcIvec, (UINT8 *)gBuffer);
         if (Ok) {
-            EFI_UDP4_TRANSMIT_DATA *TxData = gSocketTransmit->TokenTransmit.Packet.TxData;
+            EFI_UDP4_TRANSMIT_DATA *TxData = gOknUdpSocketTransmit->TokenTransmit.Packet.TxData;
             ZeroMem(TxData, sizeof(EFI_UDP4_TRANSMIT_DATA));
             TxData->DataLength = InputSize;
             TxData->FragmentCount = 1;
             TxData->FragmentTable[0].FragmentLength = InputSize;
             TxData->FragmentTable[0].FragmentBuffer = gBuffer;
-            gSocketTransmit->Udp4->Transmit(gSocketTransmit->Udp4, &gSocketTransmit->TokenTransmit);
+            gOknUdpSocketTransmit->Udp4->Transmit(gOknUdpSocketTransmit->Udp4, &gOknUdpSocketTransmit->TokenTransmit);
         }
         cJSON_Delete(Tree);
     }
@@ -3883,7 +3862,7 @@ UefiMain(
 	Print(L"[UDP] StartUdp4ReceiveOnAllNics: %r, RxSockCnt=%u\n", Status, gUdpRxSocketCount);
     gBS->Stall(4 * 1000 * 1000);
     if (false == EFI_ERROR(Status)) {
-		gSkipWaiting = FALSE;
+		gOKnSkipWaiting = FALSE;
 		MtSupportDebugWriteLine("Waiting for UDP NIC binding (first packet)...");
 		Print(L"Waiting for UDP NIC binding (first packet)...\n");
 		(VOID)WaitForUdpNicBind(0);
@@ -3891,13 +3870,13 @@ UefiMain(
 	else {
 		// 保持原始语义：UDP 不可用才 skip waiting
 		// Preserve original semantics: only skip waiting when UDP init fails.
-		gSkipWaiting = TRUE;
+		gOKnSkipWaiting = TRUE;
     }
 
     // TX socket will be created lazily in Udp4ReceiveHandler() after NIC binding.
-    gSocketTransmit = NULL;
+    gOknUdpSocketTransmit = NULL;
 
-    if (gSkipWaiting)
+    if (gOKnSkipWaiting)
         gAutoMode = TRUE;
 
     Print(GetStringById(STRING_TOKEN(STR_INIT_DISPLAY), TempBuf, sizeof(TempBuf)));
@@ -4328,7 +4307,7 @@ UefiMain(
             //         }
             //     }
             // }
-            if (!gSkipWaiting) {
+            if (!gOKnSkipWaiting) {
                 UINTN EventIndex;
                 gBS->WaitForEvent(1, &gST->ConIn->WaitForKey, &EventIndex);
             }
@@ -4986,10 +4965,10 @@ UefiMain(
         }
 
         // If AUTOMODE is enabled, we are done
-        gTestStart = FALSE;     // fix duplicate test
-        gTestStatus = ((gTestStatus == 2) ? 2: 0);
+        gOknTestStart = FALSE;     // fix duplicate test
+        gOknTestStatus = ((gOknTestStatus == 2) ? 2: 0);
         if (gAutoMode == AUTOMODE_ON) {
-            if (!gSkipWaiting)
+            if (!gOKnSkipWaiting)
                 break;
         }
         gST->ConOut->ClearScreen(gST->ConOut);
@@ -8927,18 +8906,18 @@ UINT16 MainMenu()
 {
     UINT16 Cmd = ID_BUTTON_SYSINFO;
     while (TRUE) {
-        if (gSkipWaiting) {
-            if (gTestStart) {
+        if (gOKnSkipWaiting) {
+            if (gOknTestStart) {
                 Cmd = ID_BUTTON_START;
-                gTestStart = FALSE;
-                gTestStatus = 1;
+                gOknTestStart = FALSE;
+                gOknTestStatus = 1;
                 break;
             }
-            if (gTestStatus == 0) {
+            if (gOknTestStatus == 0) {
 
             }
-            if (gTestReset == 0 || gTestReset == 1 || gTestReset == 2) {
-                gRT->ResetSystem(gTestReset, 0, 0, NULL);
+            if (gOknTestReset == 0 || gOknTestReset == 1 || gOknTestReset == 2) {
+                gRT->ResetSystem(gOknTestReset, 0, 0, NULL);
             }
         }
         gBS->CheckEvent(gST->ConIn->WaitForKey);
@@ -13869,8 +13848,8 @@ STATIC VOID PollAllUdpSockets(VOID)
     }
   }
 
-  if (gSocketTransmit != NULL && gSocketTransmit->Udp4 != NULL) {
-    gSocketTransmit->Udp4->Poll(gSocketTransmit->Udp4);
+  if (gOknUdpSocketTransmit != NULL && gOknUdpSocketTransmit->Udp4 != NULL) {
+    gOknUdpSocketTransmit->Udp4->Poll(gOknUdpSocketTransmit->Udp4);
   }
 }
 

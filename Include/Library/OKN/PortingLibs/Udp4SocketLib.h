@@ -15,6 +15,15 @@
 
 #define MAX_UDP4_FRAGMENT_LENGTH    SIZE_2KB
 
+#define MAX_UDP4_RX_SOCKETS 16
+
+extern UDP4_SOCKET *gOknUdpSocketTransmit = NULL;
+extern UDP4_SOCKET *gUdpRxSockets[MAX_UDP4_RX_SOCKETS];
+extern UINTN        gUdpRxSocketCount    = 0;
+extern UDP4_SOCKET *gUdpRxActiveSocket   = NULL;
+extern EFI_HANDLE   gUdpRxActiveSbHandle = NULL;
+extern UDP4_SOCKET *gJsonCtxSocket       = NULL;
+
 typedef struct {
   // 归属关系：这个 UDP4 child 属于哪个 UDP4 ServiceBinding(也就是哪张 NIC)
   EFI_HANDLE                    ServiceBindingHandle;

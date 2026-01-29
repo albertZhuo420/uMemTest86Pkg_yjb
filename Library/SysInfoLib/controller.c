@@ -20059,7 +20059,7 @@ static void poll_emeraldrapids_sp(struct ecc_info *ctrl)
                     Detail.Type = DIMM_ERROR_TYPE_UNKOWN;
                 }
                 
-                EnqueueError(&gDimmErrorQueue, &Detail);
+                EnqueueError(&gOknDimmErrorQueue, &Detail);
                 MtSupportReportECCError((UINTN)(mcaddr & addrmask), !uncorrected_error, -1, CPUPkg, NUM_IMC_BANKS + imc * ctrl->numch + ch, slot);
 
                 _wrmsr64(MSR_IA32_MCi_STATUS(mcbank), 0);

@@ -1,6 +1,6 @@
 /**
  * @file
- * 
+ *
  */
 
 #include <Library/OKN/OknMemTestLib/OknMemTestLib.h>
@@ -189,5 +189,122 @@ EFI_STATUS JsonGetU32FromArray(IN CONST cJSON *Arr, IN INTN Index, OUT UINT32 *V
   }
 
   *Val = (UINT32)Tmp;
+  return EFI_SUCCESS;
+}
+
+// ---- JSON "add or replace" helpers (avoid duplicate keys) ----
+
+EFI_STATUS JsonSetBool(IN cJSON *Obj, IN CONST CHAR8 *Key, IN BOOLEAN Val)
+{
+  cJSON     *Old;
+  cJSON     *NewItem;
+  cJSON_bool Ok;
+
+  if (NULL == Obj || NULL == Key) {
+    return EFI_INVALID_PARAMETER;
+  }
+
+  NewItem = cJSON_CreateBool(Val ? 1 : 0);
+  if (NULL == NewItem) {
+    return EFI_OUT_OF_RESOURCES;
+  }
+
+  Old = cJSON_GetObjectItemCaseSensitive(Obj, Key);
+  if (NULL != Old) {
+    Ok = cJSON_ReplaceItemInObjectCaseSensitive(Obj, Key, NewItem);
+    if (!Ok) {
+      cJSON_Delete(NewItem);  // replace failed -> free to avoid leak
+      return EFI_DEVICE_ERROR;
+    }
+    return EFI_SUCCESS;
+  }
+
+  Ok = cJSON_AddItemToObject(Obj, Key, NewItem);
+  if (!Ok) {
+    cJSON_Delete(NewItem);  // add failed -> free to avoid leak
+    return EFI_DEVICE_ERROR;
+  }
+
+  return EFI_SUCCESS;
+}
+
+EFI_STATUS JsonSetString(IN cJSON *Obj, IN CONST CHAR8 *Key, IN CONST CHAR8 *Val)
+{
+  cJSON     *Old;
+  cJSON     *NewItem;
+  cJSON_bool Ok;
+
+  if (NULL == Obj || NULL == Key) {
+    return EFI_INVALID_PARAMETER;
+  }
+
+  //
+  // Treat NULL Val as empty string to keep protocol stable
+  //
+  NewItem = cJSON_CreateString((NULL != Val) ? Val : "");
+  if (NULL == NewItem) {
+    return EFI_OUT_OF_RESOURCES;
+  }
+
+  Old = cJSON_GetObjectItemCaseSensitive(Obj, Key);
+  if (NULL != Old) {
+    //
+    // ReplaceItem takes ownership of NewItem on success
+    //
+    Ok = cJSON_ReplaceItemInObjectCaseSensitive(Obj, Key, NewItem);
+    if (!Ok) {
+      cJSON_Delete(NewItem);  // replace failed -> free to avoid leak
+      return EFI_DEVICE_ERROR;
+    }
+    return EFI_SUCCESS;
+  }
+
+  //
+  // AddItem takes ownership of NewItem on success
+  //
+  Ok = cJSON_AddItemToObject(Obj, Key, NewItem);
+  if (!Ok) {
+    cJSON_Delete(NewItem);  // add failed -> free to avoid leak
+    return EFI_DEVICE_ERROR;
+  }
+
+  return EFI_SUCCESS;
+}
+
+EFI_STATUS JsonSetNumber(IN cJSON *Obj, IN CONST CHAR8 *Key, IN INTN Val)
+{
+  cJSON     *Old;
+  cJSON     *NewItem;
+  cJSON_bool Ok;
+
+  if (NULL == Obj || NULL == Key) {
+    return EFI_INVALID_PARAMETER;
+  }
+
+  //
+  // cJSON number is double; for large INTN (esp. 64-bit) precision may be lost.
+  // Keep as-is to match existing code behavior.
+  //
+  NewItem = cJSON_CreateNumber((double)Val);
+  if (NULL == NewItem) {
+    return EFI_OUT_OF_RESOURCES;
+  }
+
+  Old = cJSON_GetObjectItemCaseSensitive(Obj, Key);
+  if (NULL != Old) {
+    Ok = cJSON_ReplaceItemInObjectCaseSensitive(Obj, Key, NewItem);
+    if (!Ok) {
+      cJSON_Delete(NewItem);
+      return EFI_DEVICE_ERROR;
+    }
+    return EFI_SUCCESS;
+  }
+
+  Ok = cJSON_AddItemToObject(Obj, Key, NewItem);
+  if (!Ok) {
+    cJSON_Delete(NewItem);
+    return EFI_DEVICE_ERROR;
+  }
+
   return EFI_SUCCESS;
 }

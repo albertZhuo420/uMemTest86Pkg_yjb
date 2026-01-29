@@ -547,7 +547,7 @@ VOID trainMsgCtrl(cJSON *Tree) {
 
 extern UINT8 mSpdTableDDR[MAX_CH][MAX_DIMM][MAX_SPD_BYTE_DDR];
 
-DIMM_ERROR_QUEUE gDimmErrorQueue;
+DIMM_ERROR_QUEUE gOknDimmErrorQueue;
 
 VOID readSPD(cJSON *Tree)
 {

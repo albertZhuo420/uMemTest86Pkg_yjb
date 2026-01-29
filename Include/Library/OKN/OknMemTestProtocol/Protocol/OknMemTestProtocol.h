@@ -4,8 +4,6 @@
 #include <Guid/OknMemTestProtocolGuid.h>
 #include <Uefi.h>
 
-#define OKN_MAX_ADDRESS_RECORD_SIZE 32
-
 typedef enum {
   DimmRankMapOutUnknown           = 0,
   DimmRankMapOutMemDecode         = 1,
@@ -108,12 +106,6 @@ typedef struct {
   UINT32 Column;
 } DIMM_ADDRESS_DETAIL;
 
-typedef struct {
-  DIMM_ADDRESS_DETAIL AddrBuffer[OKN_MAX_ADDRESS_RECORD_SIZE];
-  UINTN               Head;
-  UINTN               Tail;
-} DIMM_ERROR_QUEUE;
-
 #pragma pack()
 
 typedef EFI_STATUS(EFIAPI *OKN_IS_DIMM_PRESENT)(IN UINT8     Socket,
@@ -137,10 +129,8 @@ typedef EFI_STATUS(EFIAPI *OKN_GET_DIMM_TEMP)(IN UINT8   Socket,
                                               OUT UINT8 *Hub);
 // EntryNum Max Value is 5.
 typedef EFI_STATUS(EFIAPI *OKN_INJECT_PPR)(IN UINT8 EntryNum, IN OKN_PPR_INTERFACE *PprEntry);
-
 typedef EFI_STATUS(
     EFIAPI *OKN_SPD_READ)(IN UINT8 Socket, IN UINT8 Channel, IN UINT8 Dimm, OUT UINT8 *SpdData, OUT INTN *DataLen);
-
 typedef EFI_STATUS(EFIAPI *OKN_SPD_WRITE)(IN UINT8 Socket, IN UINT8 Channel, IN UINT8 Dimm, IN CONST UINT8 *SpdData);
 /**
  * 这个函数其实就是egs repo中的: EFI_STATUS SysToDimm(UINTN Address, DIMM_ADDRESS_DETAIL *DimmAddress);

@@ -51,7 +51,7 @@ typedef struct {
 } DIMM_ERROR_QUEUE;
 //OKN_20240827_yjb_ErrQueue <<
 
-extern DIMM_ERROR_QUEUE gDimmErrorQueue;
+extern DIMM_ERROR_QUEUE gOknDimmErrorQueue;
 
 VOID testConfigGet(cJSON *Tree);
 VOID testConfigSet(cJSON *Tree);

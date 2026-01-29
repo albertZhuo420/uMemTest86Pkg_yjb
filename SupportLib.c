@@ -157,11 +157,11 @@ static UINT64 mMtrrValidBitsMask;
 static UINT64 mMtrrValidAddressMask;
 static MTRR_SETTINGS mCurMtrrs, mPrevMtrrs;
 static int mFreeMtrrInd = -1;
-extern BOOLEAN              gTestStart;
-extern BOOLEAN              gTestPause;
-extern UINT8                gTestReset;
-extern UINT8                gTestStatus;
-extern UDP4_SOCKET          *gSocketTransmit;
+extern BOOLEAN              gOknTestStart;
+extern BOOLEAN              gOknTestPause;
+extern UINT8                gOknTestReset;
+extern UINT8                gOknTestStatus;
+extern UDP4_SOCKET          *gOknUdpSocketTransmit;
 
 extern UINT64 gAddrLimitLo;                   // lower address limit
 extern UINT64 gAddrLimitHi;                   // upper address limit
@@ -819,10 +819,10 @@ VOID MtSupportTestTick(BOOLEAN UpdateErr)
 #endif
     if (mPrevTestFlowPollTime == 0 || ((CurTime - mPrevTestFlowPollTime) > (500)))
     {   
-        if (gTestPause) {
+        if (gOknTestPause) {
             while (1) {
                 gBS->Stall(500000);
-                if (!gTestPause) {
+                if (!gOknTestPause) {
                     break;
                 }
             }
@@ -4150,7 +4150,7 @@ VOID
     } else {
         Detail.Type = DIMM_ERROR_TYPE_UNKOWN;
     }
-    EnqueueError(&gDimmErrorQueue, &Detail);
+    EnqueueError(&gOknDimmErrorQueue, &Detail);
 
     SetMem(actual128, sizeof(actual128), 0);
     SetMem(expected128, sizeof(expected128), 0);
@@ -9611,16 +9611,16 @@ MtSupportTestConfig()
 {
     while (TRUE)
     {
-        if (gTestStart) {
-            gTestStart = FALSE;
-            gTestStatus = 1;
+        if (gOknTestStart) {
+            gOknTestStart = FALSE;
+            gOknTestStatus = 1;
             return ID_BUTTON_START;
         }
-        if (gTestStatus == 0) {
+        if (gOknTestStatus == 0) {
 
         }
-        if (gTestReset == 0 || gTestReset == 1 || gTestReset == 2) {
-            gRT->ResetSystem(gTestReset, 0, 0, NULL);
+        if (gOknTestReset == 0 || gOknTestReset == 1 || gOknTestReset == 2) {
+            gRT->ResetSystem(gOknTestReset, 0, 0, NULL);
         }
         gBS->CheckEvent(gST->ConIn->WaitForKey);
         // gBS->Stall(50000);

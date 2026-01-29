@@ -6,7 +6,7 @@
 #include <Library/OKN/OknMemTestLib/OknMemTestLib.h>
 
 #if 1  // 全局变量 区域 ON
-DIMM_ERROR_QUEUE          gDimmErrorQueue;
+
 OKN_MEMORY_TEST_PROTOCOL *gOknMtProtoPtr;
 EFI_HANDLE                gOknChosenHandle;
 #endif  // 全局变量 区域 OFF
@@ -73,17 +73,17 @@ EFI_STATUS OknMT_IsDimmPresent(IN OKN_MEMORY_TEST_PROTOCOL *pProto, IN CONST cJS
   return EFI_SUCCESS;
 }
 
-EFI_STATUS OknMT_ConfigGet(IN OKN_MEMORY_TEST_PROTOCOL *pProto, OUT cJSON *pJsTree)
+EFI_STATUS OknMT_GetMemConfig(IN OKN_MEMORY_TEST_PROTOCOL *pProto, OUT cJSON *pJsTree)
 {
-  return OknMT_ConfigGetFunc(pProto, FALSE, pJsTree);
+  return OknMT_GetMemConfigFunc(pProto, FALSE, pJsTree);
 }
 
-EFI_STATUS OknMT_ConfigActive(IN OKN_MEMORY_TEST_PROTOCOL *pProto, OUT cJSON *pJsTree)
+EFI_STATUS OknMT_GetMemConfigReal(IN OKN_MEMORY_TEST_PROTOCOL *pProto, OUT cJSON *pJsTree)
 {
-  return OknMT_ConfigGetFunc(pProto, TRUE, pJsTree);
+  return OknMT_GetMemConfigFunc(pProto, TRUE, pJsTree);
 }
 
-EFI_STATUS OknMT_ConfigSet(IN OKN_MEMORY_TEST_PROTOCOL *pProto, IN CONST cJSON *pJsTree)
+EFI_STATUS OknMT_SetMemConfig(IN OKN_MEMORY_TEST_PROTOCOL *pProto, IN CONST cJSON *pJsTree)
 {
   EFI_STATUS Status;
 

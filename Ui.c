@@ -93,7 +93,6 @@
 //
 // Global variables
 //
-UINTN				gLastPercent = 0;
 STATIC UINT64		mProgressTotal;				// maximum progress value
 STATIC UINTN		mLastPercent;				// last progress %
 STATIC CHAR16		mTestName[64];				// current test name
@@ -707,7 +706,7 @@ MtUiUpdateProgress (
 	  MtUiDrawProgress(); 
   }
   mLastPercent = Percent;
-  gLastPercent = Percent;
+  gOknLastPercent = Percent;
 }
 
 VOID

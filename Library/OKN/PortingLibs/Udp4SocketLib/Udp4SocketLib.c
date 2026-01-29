@@ -1,4 +1,4 @@
-#include <Library/Udp4SocketLib.h>
+#include <Library/OKN/PortingLibs/Udp4SocketLib.h>
 #include <Library/UefiBootServicesTableLib.h>
 #include <Library/UefiLib.h>
 #include <Protocol/DevicePath.h>
@@ -9,8 +9,17 @@
 #include <Library/PrintLib.h>
 #include <Library/UefiLib.h>
 
+UDP4_SOCKET *gOknUdpSocketTransmit = NULL;
+UDP4_SOCKET *gUdpRxSockets[MAX_UDP4_RX_SOCKETS];
+UINTN        gUdpRxSocketCount    = 0;
+UDP4_SOCKET *gUdpRxActiveSocket   = NULL;
+EFI_HANDLE   gUdpRxActiveSbHandle = NULL;
+UDP4_SOCKET *gJsonCtxSocket = NULL;
+
 static EFI_HANDLE sDefaultUdp4SbHandle = NULL;
 static CHAR8      sStartOfBuffer[MAX_UDP4_FRAGMENT_LENGTH];
+
+
 
 STATIC VOID PrintMac(IN CONST EFI_MAC_ADDRESS *Mac, IN UINT32 HwAddrSize)
 {
