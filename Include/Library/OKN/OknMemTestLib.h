@@ -1,7 +1,7 @@
 #ifndef _OKN_MEM_TEST_UTILS_LIB_H_
 #define _OKN_MEM_TEST_UTILS_LIB_H_
 
-#include <Library/OKN/OknMemTestProtocol/Protocol/OknMemTestProtocol.h>  // 放在 最上方
+#include <Library/OKN/OknMemTestProtocol.h>  // 放在 最上方
 
 #include <Library/BaseLib.h>
 #include <Library/BaseMemoryLib.h>        // ZeroMem
@@ -31,7 +31,6 @@ typedef struct {
 
 typedef enum { OKN_TST_Finish = 0, OKN_TST_Testing = 1, OKN_TST_Aborted = 2, OKN_TST_Unknown = 0xFF } OKN_TEST_STATUS_TYPE;
 
-extern CHAR8                gOknAsciiSPrintBuffer[OKN_BUF_SIZE];
 extern UINTN                gOknLastPercent;
 extern BOOLEAN              gOKnSkipWaiting;
 extern BOOLEAN              gOknTestStart;
@@ -67,6 +66,20 @@ extern struct {
   UINT8  CurSize;
   UINT8  NewSize;
 } mPatternUI;  // current pattern | 这个变量的结构体字段不能做任何修改, uMemTest86Pkg/Ui.c文件中
+
+typedef struct {
+  OKN_MEMORY_TEST_PROTOCOL *Proto;      // 可为 NULL（某些命令不需要）
+  cJSON                    *Tree;       // IN/OUT：请求树 & 回包树（你现在就是这么用的）
+  EFI_RESET_TYPE            ResetType;  // ResetSystem 成功后填
+  BOOLEAN                   ResetReq;   // 是否请求重启
+} OKN_MT_CMD_CTX;
+
+typedef EFI_STATUS (*OKN_MT_CMD_HANDLER)(OKN_MT_CMD_CTX *Ctx);
+
+typedef struct {
+  CONST CHAR8       *CmdName;
+  OKN_MT_CMD_HANDLER Handler;
+} OKN_MT_CMD_DISPATCH;
 
 EFI_STATUS OknMT_InitProtocol(VOID);
 EFI_STATUS OknMT_SetMemConfig(IN OKN_MEMORY_TEST_PROTOCOL *pProto, IN CONST cJSON *pJsTree);

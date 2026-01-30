@@ -3,7 +3,7 @@
  *
  */
 
-#include <Library/OKN/OknMemTestLib/OknMemTestLib.h>
+#include <Library/OKN/OknMemTestLib.h>
 
 #define OKN_MAX_HANDLES_TO_PRINT 64u
 

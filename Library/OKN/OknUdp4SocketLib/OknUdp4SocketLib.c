@@ -1,25 +1,23 @@
-#include <Library/OKN/PortingLibs/Udp4SocketLib.h>
 #include <Library/UefiBootServicesTableLib.h>
 #include <Library/UefiLib.h>
 #include <Protocol/DevicePath.h>
 #include <Protocol/SimpleNetwork.h>
 #include <Protocol/Udp4.h>
 #include <Protocol/UsbIo.h>
-
 #include <Library/PrintLib.h>
 #include <Library/UefiLib.h>
 
+#include <Library/OKN/OknUdp4SocketLib.h>
+
 UDP4_SOCKET *gOknUdpSocketTransmit = NULL;
-UDP4_SOCKET *gUdpRxSockets[MAX_UDP4_RX_SOCKETS];
-UINTN        gUdpRxSocketCount    = 0;
-UDP4_SOCKET *gUdpRxActiveSocket   = NULL;
-EFI_HANDLE   gUdpRxActiveSbHandle = NULL;
-UDP4_SOCKET *gJsonCtxSocket = NULL;
+UDP4_SOCKET *gOknUdpRxSockets[MAX_UDP4_RX_SOCKETS];
+UINTN        gOknUdpRxSocketCount    = 0;
+UDP4_SOCKET *gOknUdpRxActiveSocket   = NULL;
+EFI_HANDLE   gOknUdpRxActiveSbHandle = NULL;
+UDP4_SOCKET *gOknJsonCtxSocket       = NULL;
 
 static EFI_HANDLE sDefaultUdp4SbHandle = NULL;
 static CHAR8      sStartOfBuffer[MAX_UDP4_FRAGMENT_LENGTH];
-
-
 
 STATIC VOID PrintMac(IN CONST EFI_MAC_ADDRESS *Mac, IN UINT32 HwAddrSize)
 {
@@ -128,22 +126,6 @@ EFI_STATUS EFIAPI CreateUdp4SocketByServiceBindingHandle(IN EFI_HANDLE          
   return EFI_SUCCESS;
 }
 
-EFI_STATUS EFIAPI CreateUdp4Socket(IN EFI_UDP4_CONFIG_DATA *ConfigData,
-                                   IN EFI_EVENT_NOTIFY      NotifyReceive,
-                                   IN EFI_EVENT_NOTIFY      NotifyTransmit,
-                                   OUT UDP4_SOCKET        **Socket)
-{
-  if (NULL == sDefaultUdp4SbHandle) {
-    return EFI_NOT_FOUND;
-  }
-
-  return CreateUdp4SocketByServiceBindingHandle(sDefaultUdp4SbHandle,
-                                                ConfigData,
-                                                NotifyReceive,
-                                                NotifyTransmit,
-                                                Socket);
-}
-
 EFI_STATUS EFIAPI CloseUdp4Socket(IN UDP4_SOCKET *Socket)
 {
   EFI_STATUS Status;
@@ -235,4 +217,149 @@ RETURN_STATUS EFIAPI Udp4SocketLibConstructor(VOID)
   }
 
   return (sDefaultUdp4SbHandle != NULL) ? RETURN_SUCCESS : RETURN_NOT_FOUND;
+}
+
+/**
+ * 每个 NIC 创建一个 RX socket（多个）
+ */
+EFI_STATUS StartUdp4ReceiveOnAllNics(IN EFI_UDP4_CONFIG_DATA *RxCfg)
+{
+  EFI_STATUS                   Status;
+  EFI_HANDLE                  *Handles;
+  UINTN                        HandleNum;
+  EFI_USB_IO_PROTOCOL         *UsbIo;
+  EFI_SIMPLE_NETWORK_PROTOCOL *Snp;
+
+  Print(L"Enter StartUdp4ReceiveOnAllNics()\n");
+
+  if (RxCfg == NULL) {
+    Print(L"RxCfg == NULL\n");
+    return EFI_INVALID_PARAMETER;
+  }
+
+  Handles              = NULL;
+  HandleNum            = 0;
+  gOknUdpRxSocketCount = 0;
+
+  Print(L"LocateHandleBuffer(Udp4ServiceBinding) ...\n");
+  Status = gBS->LocateHandleBuffer(ByProtocol, &gEfiUdp4ServiceBindingProtocolGuid, NULL, &HandleNum, &Handles);
+  Print(L"LocateHandleBuffer: %r, HandleNum=%u\n", Status, (UINT32)HandleNum);
+  if (EFI_ERROR(Status)) {
+    Print(L"LocateHandleBuffer() failed\n");
+    return Status;
+  }
+
+  Print(L"RxCfg: UseDefault=%u AcceptBroadcast=%u AllowDupPort=%u StationPort=%u RemotePort=%u\n",
+        (UINT32)RxCfg->UseDefaultAddress,
+        (UINT32)RxCfg->AcceptBroadcast,
+        (UINT32)RxCfg->AllowDuplicatePort,
+        (UINT32)RxCfg->StationPort,
+        (UINT32)RxCfg->RemotePort);
+
+  for (UINTN i = 0; i < HandleNum && gOknUdpRxSocketCount < MAX_UDP4_RX_SOCKETS; i++) {
+    Print(L"SB[%u] Handle=%p\n", (UINT32)i, Handles[i]);
+
+    // 跳过 USB NIC, 不跳过是不是也行??
+    UsbIo  = NULL;
+    Status = gBS->HandleProtocol(Handles[i], &gEfiUsbIoProtocolGuid, (VOID **)&UsbIo);
+    if (!EFI_ERROR(Status)) {
+      Print(L"  Skip: USB NIC\n");
+      continue;
+    }
+
+    EFI_IPv4_ADDRESS Ip;
+    ZeroMem(&Ip, sizeof(Ip));
+
+    EFI_STATUS DhcpStatus;
+    UINTN      DhcpTimeoutMs = 15000;
+    BOOLEAN    HasSnp        = FALSE;
+
+    // 尽量选择实际有效的链接.
+    Snp    = NULL;
+    Status = gBS->HandleProtocol(Handles[i], &gEfiSimpleNetworkProtocolGuid, (VOID **)&Snp);
+    if (!EFI_ERROR(Status) && Snp != NULL && Snp->Mode != NULL) {
+      HasSnp = TRUE;
+      Print(L"  SNP MediaPresent=%u State=%u HwAddrSize=%u\n",
+            (UINT32)Snp->Mode->MediaPresent,
+            (UINT32)Snp->Mode->State,
+            (UINT32)Snp->Mode->HwAddressSize);
+
+      if (Snp->Mode->HwAddressSize >= 6) {
+        Print(L"  MAC=%02x:%02x:%02x:%02x:%02x:%02x\n",
+              Snp->Mode->CurrentAddress.Addr[0],
+              Snp->Mode->CurrentAddress.Addr[1],
+              Snp->Mode->CurrentAddress.Addr[2],
+              Snp->Mode->CurrentAddress.Addr[3],
+              Snp->Mode->CurrentAddress.Addr[4],
+              Snp->Mode->CurrentAddress.Addr[5]);
+      }
+
+      if (0 == Snp->Mode->MediaPresent) {
+        Print(L"  Warn: Skip for MediaPresent=0\n");
+        continue;
+      }
+    }
+    else {
+      Print(L"  SNP not found or no Mode (Status=%r)\n", Status);
+      // 不强制 continue: 信步说有的平台 UDP4 SB handle 上不一定挂 SNP
+    }
+
+    // 先跑 DHCP, 让 UseDefaultAddress=TRUE 有 mapping
+    DhcpStatus = EnsureDhcpIp4Ready(Handles[i], DhcpTimeoutMs, &Ip);
+    if (EFI_ERROR(DhcpStatus)) {
+      Print(L"  DHCP not ready: %r\n", DhcpStatus);
+      if (RxCfg->UseDefaultAddress) {
+        Print(L"  Skip: UseDefaultAddress=TRUE requires DHCP mapping\n");
+        continue;
+      }
+    }
+
+    // 创建 socket
+    UDP4_SOCKET *Sock = NULL;
+    Status            = CreateUdp4SocketByServiceBindingHandle(Handles[i],
+                                                    RxCfg,
+                                                    (EFI_EVENT_NOTIFY)Udp4ReceiveHandler,
+                                                    (EFI_EVENT_NOTIFY)Udp4NullHandler,
+                                                    &Sock);
+    Print(L"  CreateSock: %r, Sock=%p\n", Status, Sock);
+    if (EFI_ERROR(Status) || Sock == NULL) {
+      Print(L"  Skip: CreateSock failed\n");
+      continue;
+    }
+
+    // 保存 NIC 身份到 Sock（关键）
+    if (HasSnp && Snp->Mode && Snp->Mode->HwAddressSize >= 6) {
+      CopyMem(Sock->NicMac, Snp->Mode->CurrentAddress.Addr, 6);
+    }
+    else {
+      ZeroMem(Sock->NicMac, 6);
+    }
+
+    Sock->NicIpValid = !EFI_ERROR(DhcpStatus);
+    if (Sock->NicIpValid) {
+      Sock->NicIp = Ip;
+    }
+    else {
+      ZeroMem(&Sock->NicIp, sizeof(Sock->NicIp));
+    }
+    Sock->TokenReceive.Packet.RxData = NULL;
+    Status                           = Sock->Udp4->Receive(Sock->Udp4, &Sock->TokenReceive);
+    Print(L"  Receive(submit): %r\n", Status);
+    if (EFI_ERROR(Status)) {
+      Print(L"  Receive() FAILED on SB handle %p: %r\n", Handles[i], Status);
+      CloseUdp4Socket(Sock);
+      continue;
+    }
+
+    gOknUdpRxSockets[gOknUdpRxSocketCount++] = Sock;
+    Print(L"  Added RX socket. Count=%u\n", (UINT32)gOknUdpRxSocketCount);
+  }  // for() 结束
+
+  if (Handles != NULL) {
+    FreePool(Handles);
+  }
+
+  Print(L"Exit StartUdp4ReceiveOnAllNics(): gOknUdpRxSocketCount=%u\n", (UINT32)gOknUdpRxSocketCount);
+  gBS->Stall(2 * 1000 * 1000);
+  return (gOknUdpRxSocketCount > 0) ? EFI_SUCCESS : EFI_NOT_FOUND;
 }

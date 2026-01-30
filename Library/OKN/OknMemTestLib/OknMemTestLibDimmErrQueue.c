@@ -2,29 +2,11 @@
 
 DIMM_ERROR_QUEUE gOknDimmErrorQueue;
 
-STATIC VOID OknMT_EnsureErrorQueueLockInit(IN OUT DIMM_ERROR_QUEUE *Queue)
-{
-  if (NULL == Queue) {
-    return;
-  }
+STATIC VOID    OknMT_EnsureErrorQueueLockInit(IN OUT DIMM_ERROR_QUEUE *Queue);
+STATIC BOOLEAN OknMT_IsErrorQueueEmptyNoLock(IN CONST DIMM_ERROR_QUEUE *Queue);
+STATIC BOOLEAN OknMT_IsErrorQueueFullNoLock(IN CONST DIMM_ERROR_QUEUE *Queue);
 
-  if (!Queue->LockInitialized) {
-    InitializeSpinLock(&Queue->Lock);
-    Queue->LockInitialized = TRUE;
-  }
-
-  return;
-}
-
-STATIC BOOLEAN OknMT_IsErrorQueueEmptyNoLock(IN CONST DIMM_ERROR_QUEUE *Queue)
-{
-  return (Queue->Head == Queue->Tail);
-}
-
-STATIC BOOLEAN OknMT_IsErrorQueueFullNoLock(IN CONST DIMM_ERROR_QUEUE *Queue)
-{
-  return (((Queue->Tail + 1) % OKN_MAX_ADDRESS_RECORD_SIZE) == Queue->Head);
-}
+/**********************************************************************************/
 
 VOID OknMT_InitErrorQueue(DIMM_ERROR_QUEUE *Queue)
 {
@@ -125,4 +107,30 @@ EFI_STATUS OknMT_DequeueErrorCopy(IN OUT DIMM_ERROR_QUEUE *Queue, OUT DIMM_ADDRE
   ReleaseSpinLock(&Queue->Lock);
 
   return EFI_SUCCESS;
+}
+
+/**********************************************************************************/
+
+STATIC VOID OknMT_EnsureErrorQueueLockInit(IN OUT DIMM_ERROR_QUEUE *Queue)
+{
+  if (NULL == Queue) {
+    return;
+  }
+
+  if (!Queue->LockInitialized) {
+    InitializeSpinLock(&Queue->Lock);
+    Queue->LockInitialized = TRUE;
+  }
+
+  return;
+}
+
+STATIC BOOLEAN OknMT_IsErrorQueueEmptyNoLock(IN CONST DIMM_ERROR_QUEUE *Queue)
+{
+  return (Queue->Head == Queue->Tail);
+}
+
+STATIC BOOLEAN OknMT_IsErrorQueueFullNoLock(IN CONST DIMM_ERROR_QUEUE *Queue)
+{
+  return (((Queue->Tail + 1) % OKN_MAX_ADDRESS_RECORD_SIZE) == Queue->Head);
 }

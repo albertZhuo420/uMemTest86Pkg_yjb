@@ -172,7 +172,7 @@
 #include "images/qrcode.h"
 #include "images/qrcode_asus.h"
 #include <Library/OKN/PortingLibs/cJSONLib.h>
-#include <Library/OKN/PortingLibs/Udp4SocketLib.h>
+#include <Library/OKN/OknUdp4SocketLib.h>
 #include <Library/BaseCryptLib.h>
 #include <Protocol/Smbios.h>
 
@@ -1761,17 +1761,17 @@ VOID JsonHandler(cJSON *Tree)
     } else if (AsciiStrnCmp("areyouok", Cmd->valuestring, 8) == 0) {
         cJSON_AddBoolToObject(Tree, "SUCCESS", true);
         // 关键：MAC/IP 来自“当前接收该包的 NIC”
-        if (gJsonCtxSocket != NULL) {
+        if (gOknJsonCtxSocket != NULL) {
           AsciiSPrint(gBuffer, BUF_SIZE, "%02x:%02x:%02x:%02x:%02x:%02x",
-                      gJsonCtxSocket->NicMac[0], gJsonCtxSocket->NicMac[1],
-                      gJsonCtxSocket->NicMac[2], gJsonCtxSocket->NicMac[3],
-                      gJsonCtxSocket->NicMac[4], gJsonCtxSocket->NicMac[5]);
+                      gOknJsonCtxSocket->NicMac[0], gOknJsonCtxSocket->NicMac[1],
+                      gOknJsonCtxSocket->NicMac[2], gOknJsonCtxSocket->NicMac[3],
+                      gOknJsonCtxSocket->NicMac[4], gOknJsonCtxSocket->NicMac[5]);
           cJSON_AddStringToObject(Tree, "MAC", gBuffer);
       
-          if (gJsonCtxSocket->NicIpValid) {
+          if (gOknJsonCtxSocket->NicIpValid) {
             AsciiSPrint(gBuffer, BUF_SIZE, "%d.%d.%d.%d",
-                        gJsonCtxSocket->NicIp.Addr[0], gJsonCtxSocket->NicIp.Addr[1],
-                        gJsonCtxSocket->NicIp.Addr[2], gJsonCtxSocket->NicIp.Addr[3]);
+                        gOknJsonCtxSocket->NicIp.Addr[0], gOknJsonCtxSocket->NicIp.Addr[1],
+                        gOknJsonCtxSocket->NicIp.Addr[2], gOknJsonCtxSocket->NicIp.Addr[3]);
             cJSON_AddStringToObject(Tree, "IP", gBuffer);
           }
         } else {
@@ -1886,300 +1886,6 @@ VOID JsonHandler(cJSON *Tree)
     }
 }
 
-/**
- * 每个 NIC 创建一个 RX socket（多个）
- */
-STATIC EFI_STATUS StartUdp4ReceiveOnAllNics(IN EFI_UDP4_CONFIG_DATA *RxCfg)
-{
-  EFI_STATUS                  Status;
-  EFI_HANDLE                  *Handles;
-  UINTN                       HandleNum;
-  EFI_USB_IO_PROTOCOL         *UsbIo;
-  EFI_SIMPLE_NETWORK_PROTOCOL *Snp;
-
-  Print(L"Enter StartUdp4ReceiveOnAllNics()\n");
-
-  if (RxCfg == NULL) {
-    Print(L"RxCfg == NULL\n");
-    return EFI_INVALID_PARAMETER;
-  }
-
-  Handles   = NULL;
-  HandleNum = 0;
-  gUdpRxSocketCount = 0;
-
-  Print(L"LocateHandleBuffer(Udp4ServiceBinding) ...\n");
-  Status = gBS->LocateHandleBuffer(
-                  ByProtocol,
-                  &gEfiUdp4ServiceBindingProtocolGuid,
-                  NULL,
-                  &HandleNum,
-                  &Handles
-                  );
-  Print(L"LocateHandleBuffer: %r, HandleNum=%u\n", Status, (UINT32)HandleNum);
-  if (EFI_ERROR(Status)) {
-	Print(L"LocateHandleBuffer() failed\n");
-    return Status;
-  }
-
-  Print(L"RxCfg: UseDefault=%u AcceptBroadcast=%u AllowDupPort=%u StationPort=%u RemotePort=%u\n",
-         (UINT32)RxCfg->UseDefaultAddress,
-         (UINT32)RxCfg->AcceptBroadcast,
-         (UINT32)RxCfg->AllowDuplicatePort,
-         (UINT32)RxCfg->StationPort,
-         (UINT32)RxCfg->RemotePort);
-
-  for (UINTN i = 0; i < HandleNum && gUdpRxSocketCount < MAX_UDP4_RX_SOCKETS; i++) {
-    Print(L"SB[%u] Handle=%p\n", (UINT32)i, Handles[i]);
-
-    // 跳过 USB NIC, 不跳过是不是也行??
-    UsbIo = NULL;
-    Status = gBS->HandleProtocol(Handles[i], &gEfiUsbIoProtocolGuid, (VOID **)&UsbIo);
-    if (!EFI_ERROR(Status)) {
-      Print(L"  Skip: USB NIC\n");
-      continue;
-    }
-
-    EFI_IPv4_ADDRESS Ip;
-    ZeroMem(&Ip, sizeof(Ip));
-
-    EFI_STATUS       DhcpStatus;
-    UINTN            DhcpTimeoutMs = 15000;
-    BOOLEAN          HasSnp = FALSE;
-
-    // 尽量选择实际有效的链接.
-    Snp = NULL;
-    Status = gBS->HandleProtocol(Handles[i], &gEfiSimpleNetworkProtocolGuid, (VOID **)&Snp);
-    if (!EFI_ERROR(Status) && Snp != NULL && Snp->Mode != NULL) {
-      HasSnp = TRUE;
-      Print(L"  SNP MediaPresent=%u State=%u HwAddrSize=%u\n",
-             (UINT32)Snp->Mode->MediaPresent,
-             (UINT32)Snp->Mode->State,
-             (UINT32)Snp->Mode->HwAddressSize);
-
-      if (Snp->Mode->HwAddressSize >= 6) {
-        Print(L"  MAC=%02x:%02x:%02x:%02x:%02x:%02x\n",
-               Snp->Mode->CurrentAddress.Addr[0],
-               Snp->Mode->CurrentAddress.Addr[1],
-               Snp->Mode->CurrentAddress.Addr[2],
-               Snp->Mode->CurrentAddress.Addr[3],
-               Snp->Mode->CurrentAddress.Addr[4],
-               Snp->Mode->CurrentAddress.Addr[5]);
-      }
-
-      if (0 == Snp->Mode->MediaPresent) {
-        Print(L"  Warn: Skip for MediaPresent=0\n");
-        continue;
-      }
-    } 
-	else {
-      Print(L"  SNP not found or no Mode (Status=%r)\n", Status);
-      // 不强制 continue: 信步说有的平台 UDP4 SB handle 上不一定挂 SNP
-    }
-
-	// 先跑 DHCP, 让 UseDefaultAddress=TRUE 有 mapping
-    DhcpStatus = EnsureDhcpIp4Ready(Handles[i], DhcpTimeoutMs, &Ip);
-    if (EFI_ERROR(DhcpStatus)) {
-      Print(L"  DHCP not ready: %r\n", DhcpStatus);
-      if (RxCfg->UseDefaultAddress) {
-        Print(L"  Skip: UseDefaultAddress=TRUE requires DHCP mapping\n");
-        continue;
-      }
-    }
-    
-	// 创建 socket
-    UDP4_SOCKET *Sock = NULL;
-    Status = CreateUdp4SocketByServiceBindingHandle(
-               Handles[i],
-               RxCfg,
-               (EFI_EVENT_NOTIFY)Udp4ReceiveHandler,
-               (EFI_EVENT_NOTIFY)Udp4NullHandler,
-               &Sock
-               );
-    Print(L"  CreateSock: %r, Sock=%p\n", Status, Sock);
-    if (EFI_ERROR(Status) || Sock == NULL) {
-      Print(L"  Skip: CreateSock failed\n");
-      continue;
-    }
-
-	// 保存 NIC 身份到 Sock（关键）
-    if (HasSnp && Snp->Mode && Snp->Mode->HwAddressSize >= 6) {
-      CopyMem(Sock->NicMac, Snp->Mode->CurrentAddress.Addr, 6);
-    } 
-	else {
-      ZeroMem(Sock->NicMac, 6);
-    }
-
-    Sock->NicIpValid = !EFI_ERROR(DhcpStatus);
-    if (Sock->NicIpValid) {
-      Sock->NicIp = Ip;
-    } 
-	else {
-      ZeroMem(&Sock->NicIp, sizeof(Sock->NicIp));
-    }
-    Sock->TokenReceive.Packet.RxData = NULL;
-    Status = Sock->Udp4->Receive(Sock->Udp4, &Sock->TokenReceive);
-    Print(L"  Receive(submit): %r\n", Status);
-    if (EFI_ERROR(Status)) {
-      Print(L"  Receive() FAILED on SB handle %p: %r\n", Handles[i], Status);
-      CloseUdp4Socket(Sock);
-      continue;
-    }
-
-    gUdpRxSockets[gUdpRxSocketCount++] = Sock;
-    Print(L"  Added RX socket. Count=%u\n", (UINT32)gUdpRxSocketCount);
-  } // for() 结束
-
-  if (Handles != NULL) {
-    FreePool(Handles);
-  }
-
-  Print(L"Exit StartUdp4ReceiveOnAllNics(): gUdpRxSocketCount=%u\n", (UINT32)gUdpRxSocketCount);
-  gBS->Stall(2 * 1000 * 1000);
-  return (gUdpRxSocketCount > 0) ? EFI_SUCCESS : EFI_NOT_FOUND;
-}
-
-
-#if 0
-VOID EFIAPI Udp4ReceiveHandler(IN EFI_EVENT  Event,  IN VOID *Context)
-{
-  EFI_STATUS Status;
-  UDP4_SOCKET                 *Socket = Context;
-
-  EFI_UDP4_RECEIVE_DATA       *RxData = Socket->TokenReceive.Packet.RxData;
-
-  if (RxData == NULL) {
-    Socket->TokenReceive.Packet.RxData = NULL;
-   EFI_STATUS Status = Socket->Udp4->Receive(Socket->Udp4, &Socket->TokenReceive);
-    return;
-  }
-
-  if (Socket->TokenReceive.Status == EFI_ABORTED) {
-    return;
-  }
-
-  if (RxData == NULL || RxData->DataLength == 0) {
-    if (RxData != NULL) {
-      gBS->SignalEvent(RxData->RecycleSignal);
-    }
-    Socket->TokenReceive.Packet.RxData = NULL;
-    Socket->Udp4->Receive(Socket->Udp4, &Socket->TokenReceive);
-    return;
-  }
-  // Auto-bind to the first NIC that receives a packet.
-  if (gUdpRxActiveSocket == NULL) {
-    gUdpRxActiveSocket = Socket;
-    gUdpRxActiveSbHandle = Socket->ServiceBindingHandle;
-
-    for (UINTN i = 0; i < gUdpRxSocketCount; i++) {
-      if (gUdpRxSockets[i] != NULL && gUdpRxSockets[i] != Socket) {
-        DisableUdpRxSocket(gUdpRxSockets[i]);
-      }
-    }
-  }
-
-  // Ignore packets that arrive on non-selected NICs.
-  if (Socket != gUdpRxActiveSocket) {
-    gBS->SignalEvent(RxData->RecycleSignal);
-    return;
-  }
-
-  // Lazily create TX socket on the selected NIC.
-  if (gOknUdpSocketTransmit == NULL && gUdpRxActiveSbHandle != NULL) {
-    EFI_UDP4_CONFIG_DATA TxCfg = {
-      TRUE,   // AcceptBroadcast
-      FALSE,  // AcceptPromiscuous
-      FALSE,  // AcceptAnyPort
-      TRUE,   // AllowDuplicatePort
-      0,      // TypeOfService
-      16,     // TimeToLive
-      TRUE,   // DoNotFragment
-      0,      // ReceiveTimeout
-      0,      // TransmitTimeout
-      TRUE,  // UseDefaultAddress
-      {{0, 0, 0, 0}},  // StationAddress
-      {{0, 0, 0, 0}},  // SubnetMask
-      5566,            // StationPort
-      {{0, 0, 0, 0}},  // RemoteAddress
-      0,               // RemotePort
-    };
-
-    EFI_STATUS TxStatus;
-    TxStatus = CreateUdp4SocketByServiceBindingHandle(
-                 gUdpRxActiveSbHandle,
-                 &TxCfg,
-                 (EFI_EVENT_NOTIFY)Udp4NullHandler,
-                 (EFI_EVENT_NOTIFY)Udp4NullHandler,
-                 &gOknUdpSocketTransmit);
-    if (EFI_ERROR(TxStatus)) {
-      Print(L"[UDP] Create TX socket failed: %r\n", TxStatus);
-      gOknUdpSocketTransmit = NULL;
-    }
-  }
-
-  if (gOknUdpSocketTransmit == NULL) {
-    gBS->SignalEvent(RxData->RecycleSignal);
-    Socket->Udp4->Receive(Socket->Udp4, &Socket->TokenReceive);
-    return;
-  }
-
-  gOknUdpSocketTransmit->ConfigData.RemoteAddress = RxData->UdpSession.SourceAddress;
-  gOknUdpSocketTransmit->ConfigData.RemotePort = RxData->UdpSession.SourcePort;
-  gOknUdpSocketTransmit->Udp4->Configure(gOknUdpSocketTransmit->Udp4, NULL);
-  gOknUdpSocketTransmit->Udp4->Configure(gOknUdpSocketTransmit->Udp4, &gOknUdpSocketTransmit->ConfigData);
-#ifndef AES_ENABLE
-  cJSON *Tree = NULL;
-  Tree = cJSON_ParseWithLength(RxData->FragmentTable[0].FragmentBuffer, RxData->FragmentTable[0].FragmentLength);
-
-  if (Tree) {
-    JsonHandler(Tree);
-    CHAR8 *JsonStr = cJSON_PrintUnformatted(Tree);
-    UINT32 JsonStrLen = (UINT32)AsciiStrLen(JsonStr);
-    EFI_UDP4_TRANSMIT_DATA *TxData = gOknUdpSocketTransmit->TokenTransmit.Packet.TxData;
-    ZeroMem(TxData, sizeof(EFI_UDP4_TRANSMIT_DATA));
-    TxData->DataLength = JsonStrLen;
-    TxData->FragmentCount = 1;
-    TxData->FragmentTable[0].FragmentLength = JsonStrLen;
-    TxData->FragmentTable[0].FragmentBuffer = JsonStr;
-    gOknUdpSocketTransmit->Udp4->Transmit(gOknUdpSocketTransmit->Udp4, &gOknUdpSocketTransmit->TokenTransmit);
-    cJSON_Delete(Tree);
-  }
-#else
-  UINT32 InputSize = ALIGN_VALUE(RxData->FragmentTable[0].FragmentLength, 16);
-  ZeroMem(g_wszBuffer, InputSize);
-  CopyMem(g_wszBuffer, RxData->FragmentTable[0].FragmentBuffer, RxData->FragmentTable[0].FragmentLength);
-  BOOLEAN Ok = AesCbcDecrypt(gAesContext, (UINT8 *)g_wszBuffer, InputSize, Aes128CbcIvec, (UINT8 *)gBuffer);
-  if (Ok) {
-    cJSON *Tree = NULL;
-    Tree = cJSON_ParseWithLength(gBuffer, InputSize);
-    if (Tree) {
-        JsonHandler(Tree);
-        CHAR8 *JsonStr = cJSON_PrintUnformatted(Tree);
-        UINT32 JsonStrLen = (UINT32)AsciiStrLen(JsonStr);
-        InputSize = ALIGN_VALUE(JsonStrLen, 16);
-        ZeroMem(g_wszBuffer, InputSize);
-        CopyMem(g_wszBuffer, JsonStr, JsonStrLen);
-        Ok = AesCbcEncrypt(gAesContext, (UINT8 *)g_wszBuffer, InputSize, Aes128CbcIvec, (UINT8 *)gBuffer);
-        if (Ok) {
-            EFI_UDP4_TRANSMIT_DATA *TxData = gOknUdpSocketTransmit->TokenTransmit.Packet.TxData;
-            ZeroMem(TxData, sizeof(EFI_UDP4_TRANSMIT_DATA));
-            TxData->DataLength = InputSize;
-            TxData->FragmentCount = 1;
-            TxData->FragmentTable[0].FragmentLength = InputSize;
-            TxData->FragmentTable[0].FragmentBuffer = gBuffer;
-            gOknUdpSocketTransmit->Udp4->Transmit(gOknUdpSocketTransmit->Udp4, &gOknUdpSocketTransmit->TokenTransmit);
-        }
-        cJSON_Delete(Tree);
-    }
-  }
-#endif
-  gBS->SignalEvent(RxData->RecycleSignal);
-  Socket->TokenReceive.Packet.RxData = NULL;
-  Socket->Udp4->Receive(Socket->Udp4, &Socket->TokenReceive);
-  return;
-} // VOID EFIAPI Udp4ReceiveHandler(IN EFI_EVENT  Event,  IN VOID *Context)
-#endif
-
 VOID EFIAPI Udp4ReceiveHandler(IN EFI_EVENT Event, IN VOID *Context)
 {
   UDP4_SOCKET           *Socket;
@@ -2218,19 +1924,19 @@ VOID EFIAPI Udp4ReceiveHandler(IN EFI_EVENT Event, IN VOID *Context)
   }
 
   // 4) 首包绑定：选择第一个收到包的 NIC, 其它 RX socket 全部禁用
-  if (gUdpRxActiveSocket == NULL) {
-    gUdpRxActiveSocket   = Socket;
-    gUdpRxActiveSbHandle = Socket->ServiceBindingHandle;
+  if (gOknUdpRxActiveSocket == NULL) {
+    gOknUdpRxActiveSocket   = Socket;
+    gOknUdpRxActiveSbHandle = Socket->ServiceBindingHandle;
 
-    for (UINTN i = 0; i < gUdpRxSocketCount; i++) {
-      if (gUdpRxSockets[i] != NULL && gUdpRxSockets[i] != Socket) {
-        DisableUdpRxSocket(gUdpRxSockets[i]);
+    for (UINTN i = 0; i < gOknUdpRxSocketCount; i++) {
+      if (gOknUdpRxSockets[i] != NULL && gOknUdpRxSockets[i] != Socket) {
+        DisableUdpRxSocket(gOknUdpRxSockets[i]);
       }
     }
   }
 
   // 5) 非选中 NIC 上来的包直接丢弃（但要回收 RxData）
-  if (Socket != gUdpRxActiveSocket) {
+  if (Socket != gOknUdpRxActiveSocket) {
     gBS->SignalEvent(RxData->RecycleSignal);
     Socket->TokenReceive.Packet.RxData = NULL;
     return;
@@ -2238,7 +1944,7 @@ VOID EFIAPI Udp4ReceiveHandler(IN EFI_EVENT Event, IN VOID *Context)
 
   // 6) 懒创建 TX socket：只创建一次, 绑定到选中的 SB handle
   //    注意：NotifyTransmit 改为 Udp4TxFreeHandler, 用于释放本次发送的内存
-  if (gOknUdpSocketTransmit == NULL && gUdpRxActiveSbHandle != NULL) {
+  if (gOknUdpSocketTransmit == NULL && gOknUdpRxActiveSbHandle != NULL) {
     EFI_UDP4_CONFIG_DATA TxCfg = {
       TRUE,   // AcceptBroadcast
       FALSE,  // AcceptPromiscuous
@@ -2260,7 +1966,7 @@ VOID EFIAPI Udp4ReceiveHandler(IN EFI_EVENT Event, IN VOID *Context)
     EFI_STATUS TxStatus;
 
     TxStatus = CreateUdp4SocketByServiceBindingHandle(
-                 gUdpRxActiveSbHandle,
+                 gOknUdpRxActiveSbHandle,
                  &TxCfg,
                  (EFI_EVENT_NOTIFY)Udp4NullHandler,   // Tx socket 不需要 Receive 回调
                  (EFI_EVENT_NOTIFY)Udp4TxFreeHandler, // TX 完成释放资源: Udp4TxFreeHandler
@@ -2300,9 +2006,9 @@ VOID EFIAPI Udp4ReceiveHandler(IN EFI_EVENT Event, IN VOID *Context)
 
   if (Tree != NULL) {
     // 9) 设置 JsonHandler 上下文：确保 areyouok 填的是“当前 NIC”的 MAC/IP
-    gJsonCtxSocket = Socket;
+    gOknJsonCtxSocket = Socket;
     JsonHandler(Tree);
-    gJsonCtxSocket = NULL;
+    gOknJsonCtxSocket = NULL;
 
     // 10) 生成响应 JSON（cJSON_PrintUnformatted 返回需要 cJSON_free 的内存）
     CHAR8 *JsonStr = cJSON_PrintUnformatted(Tree);
@@ -3859,7 +3565,7 @@ UefiMain(
     gBS->Stall(4000 * 1000); // 1s
 
     Status = StartUdp4ReceiveOnAllNics(&RxConfigData);
-	Print(L"[UDP] StartUdp4ReceiveOnAllNics: %r, RxSockCnt=%u\n", Status, gUdpRxSocketCount);
+	Print(L"[UDP] StartUdp4ReceiveOnAllNics: %r, RxSockCnt=%u\n", Status, gOknUdpRxSocketCount);
     gBS->Stall(4 * 1000 * 1000);
     if (false == EFI_ERROR(Status)) {
 		gOKnSkipWaiting = FALSE;
@@ -13842,9 +13548,9 @@ VOID
 /****************** OKN  ******************/
 STATIC VOID PollAllUdpSockets(VOID)
 {
-  for (UINTN i = 0; i < gUdpRxSocketCount; ++i) {
-    if (gUdpRxSockets[i] != NULL && gUdpRxSockets[i]->Udp4 != NULL) {
-      gUdpRxSockets[i]->Udp4->Poll(gUdpRxSockets[i]->Udp4);
+  for (UINTN i = 0; i < gOknUdpRxSocketCount; ++i) {
+    if (gOknUdpRxSockets[i] != NULL && gOknUdpRxSockets[i]->Udp4 != NULL) {
+      gOknUdpRxSockets[i]->Udp4->Poll(gOknUdpRxSockets[i]->Udp4);
     }
   }
 
@@ -13860,7 +13566,7 @@ STATIC EFI_STATUS WaitForUdpNicBind(UINTN TimeoutMs)
 
   UDP_LOG("WaitForUdpNicBind() start, timeout=%u ms", TimeoutMs);
 
-  while (NULL == gUdpRxActiveSocket) {
+  while (NULL == gOknUdpRxActiveSocket) {
     PollAllUdpSockets();
     gBS->Stall(10 * 1000);
 
@@ -13868,7 +13574,7 @@ STATIC EFI_STATUS WaitForUdpNicBind(UINTN TimeoutMs)
     Tick++;
 
     if (0 == (Tick % 100)) { // 约 1 秒
-      UDP_LOG("Waiting bind... Elapsed=%u ms Active=%p", Elapsed, gUdpRxActiveSocket);
+      UDP_LOG("Waiting bind... Elapsed=%u ms Active=%p", Elapsed, gOknUdpRxActiveSocket);
     }
 
     if (TimeoutMs != 0 && Elapsed >= TimeoutMs) {
@@ -13877,7 +13583,7 @@ STATIC EFI_STATUS WaitForUdpNicBind(UINTN TimeoutMs)
     }
   }
 
-  UDP_LOG("WaitForUdpNicBind() DONE, Active=%p", gUdpRxActiveSocket);
+  UDP_LOG("WaitForUdpNicBind() DONE, Active=%p", gOknUdpRxActiveSocket);
   return EFI_SUCCESS;
 }
 

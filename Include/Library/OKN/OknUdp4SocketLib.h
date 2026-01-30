@@ -18,11 +18,11 @@
 #define MAX_UDP4_RX_SOCKETS 16
 
 extern UDP4_SOCKET *gOknUdpSocketTransmit = NULL;
-extern UDP4_SOCKET *gUdpRxSockets[MAX_UDP4_RX_SOCKETS];
-extern UINTN        gUdpRxSocketCount    = 0;
-extern UDP4_SOCKET *gUdpRxActiveSocket   = NULL;
-extern EFI_HANDLE   gUdpRxActiveSbHandle = NULL;
-extern UDP4_SOCKET *gJsonCtxSocket       = NULL;
+extern UDP4_SOCKET *gOknUdpRxSockets[MAX_UDP4_RX_SOCKETS];
+extern UINTN        gOknUdpRxSocketCount    = 0;
+extern UDP4_SOCKET *gOknUdpRxActiveSocket   = NULL;
+extern EFI_HANDLE   gOknUdpRxActiveSbHandle = NULL;
+extern UDP4_SOCKET *gOknJsonCtxSocket       = NULL;
 
 typedef struct {
   // 归属关系：这个 UDP4 child 属于哪个 UDP4 ServiceBinding(也就是哪张 NIC)
@@ -50,8 +50,8 @@ typedef struct {
 } UDP4_SOCKET;
 
 EFI_STATUS EFIAPI CreateUdp4SocketByServiceBindingHandle(EFI_HANDLE Udp4ServiceBindingHandle, EFI_UDP4_CONFIG_DATA *ConfigData, EFI_EVENT_NOTIFY NotifyReceive, EFI_EVENT_NOTIFY NotifyTransmit, UDP4_SOCKET **Socket);
-EFI_STATUS EFIAPI CreateUdp4Socket(EFI_UDP4_CONFIG_DATA *ConfigData, EFI_EVENT_NOTIFY NotifyReceive, EFI_EVENT_NOTIFY NotifyTransmit, UDP4_SOCKET **Socket);
 EFI_STATUS EFIAPI CloseUdp4Socket(UDP4_SOCKET *Socket);
 EFI_STATUS EFIAPI AsciiUdp4Write(UDP4_SOCKET *Socket, CONST CHAR8 *FormatString, ...);
+EFI_STATUS        StartUdp4ReceiveOnAllNics(IN EFI_UDP4_CONFIG_DATA *RxCfg);
 
 #endif

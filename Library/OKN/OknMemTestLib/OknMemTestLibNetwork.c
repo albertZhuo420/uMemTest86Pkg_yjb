@@ -3,9 +3,9 @@
  *
  */
 
-#include <Library/OKN/OknDdr4SpdLib/OknDdr4SpdLib.h>
-#include <Library/OKN/OknMemTestLib/OknMemTestLib.h>
-#include <Library/OKN/PortingLibs/Udp4SocketLib.h>
+#include <Library/OKN/OknDdr4SpdLib.h>
+#include <Library/OKN/OknMemTestLib.h>
+#include <Library/OKN/OknUdp4SocketLib.h>
 #include <Protocol/Smbios.h>
 #include <uMemTest86.h>
 
@@ -17,272 +17,439 @@
  *    └─ UDP4 Tx (gOknUdpSocketTransmit->Transmit) -> 回发给上位机
  */
 
-UINTN gOknLastPercent;  // 用在uMemTest86Pkg/Ui.c 文件中: mLastPercent;
-
+#if 1  // OKN 前置定义区域 ON
+/**GLOBAL/STATIC变量 前置定义区域********************************************************/
+UINTN                gOknLastPercent;  // 用在uMemTest86Pkg/Ui.c 文件中: mLastPercent;
 BOOLEAN              gOKnSkipWaiting = FALSE;
 BOOLEAN              gOknTestStart   = FALSE;
 BOOLEAN              gOknTestPause   = FALSE;
-UINT8                gOknTestReset   = 0xff;
+EFI_RESET_TYPE       gOknTestReset   = EfiResetPlatformSpecific;
 OKN_TEST_STATUS_TYPE gOknTestStatus  = OKN_TST_Unknown;
-INT8                 gOknMT86TestID  = -1;               // 这个是MT86真实的TestID [0 ... 15]
+INT8                 gOknMT86TestID  = -1;  // 这个是MT86真实的TestID [0 ... 15]
 
-CHAR8 gOknAsciiSPrintBuffer[OKN_BUF_SIZE];
+  #define CMD_ENTRY(_name, _handler) {(_name), (_handler)}
 
-VOID JsonHandler(cJSON *Tree)
+STATIC CONST OKN_MT_CMD_DISPATCH gOknCmdTable[] = {
+    // ---- 新命令名（对外只暴露这些）----
+    CMD_ENTRY("SetAmtConfig", OknMT_ProcessJsonCmd_SetAmtConfig),
+    CMD_ENTRY("MT86_Status", OknMT_ProcessJsonCmd_MT86Status),
+    CMD_ENTRY("MT86_Start", OknMT_ProcessJsonCmd_MT86Start),
+    CMD_ENTRY("MT86_Abort", OknMT_ProcessJsonCmd_MT86Abort),
+    CMD_ENTRY("Reply_9527", OknMT_ProcessJsonCmd_Reply9527),
+    CMD_ENTRY("HW_Info", OknMT_ProcessJsonCmd_HwInfo),
+    CMD_ENTRY("ReadSPD", OknMT_ProcessJsonCmd_ReadSPD),
+    CMD_ENTRY("GetMemConfig", OknMT_ProcessJsonCmd_GetMemConfig),
+    CMD_ENTRY("GetMemConfigReal", OknMT_ProcessJsonCmd_GetMemConfigReal),
+    CMD_ENTRY("SetMemConfig", OknMT_ProcessJsonCmd_SetMemConfig),
+    CMD_ENTRY("ResetSystem", OknMT_ProcessJsonCmd_ResetSystem),
+    // ---- 兼容旧命令名（保留一段时间再删除）----
+    CMD_ENTRY("amtStart", OknMT_ProcessJsonCmd_SetAmtConfig),
+    CMD_ENTRY("testStatus", OknMT_ProcessJsonCmd_MT86Status),
+    CMD_ENTRY("testStart", OknMT_ProcessJsonCmd_MT86Start),
+    CMD_ENTRY("testStop", OknMT_ProcessJsonCmd_MT86Abort),
+    CMD_ENTRY("areyouok", OknMT_ProcessJsonCmd_Reply9527),
+    CMD_ENTRY("connect", OknMT_ProcessJsonCmd_HwInfo),
+    CMD_ENTRY("readSPD", OknMT_ProcessJsonCmd_ReadSPD),
+    CMD_ENTRY("testConfigGet", OknMT_ProcessJsonCmd_GetMemConfig),
+    CMD_ENTRY("testConfigActive", OknMT_ProcessJsonCmd_GetMemConfigReal),
+    CMD_ENTRY("testConfigSet", OknMT_ProcessJsonCmd_SetMemConfig),
+    CMD_ENTRY("reset", OknMT_ProcessJsonCmd_ResetSystem),
+};
+/**STATIC函数 前置定义区域1**************************************************************/
+STATIC UINTN      OknCmdTableCount(VOID);
+STATIC EFI_STATUS OknMT_DispatchJsonCmd(IN OKN_MEMORY_TEST_PROTOCOL *Proto,
+                                        IN OUT cJSON                *Tree,
+                                        OUT EFI_RESET_TYPE          *OutResetType,
+                                        OUT BOOLEAN                 *OutNeedReset);
+STATIC EFI_STATUS OKnSmbiosGetOptionalStringByIndex(IN CONST CHAR8   *OptionalStrStart,
+                                                    IN UINT8          Index,
+                                                    OUT CONST CHAR8 **OutStr);
+/**STATIC函数 前置定义区域2**************************************************************/
+STATIC EFI_STATUS OknMT_ProcessJsonCmd_SetAmtConfig(OKN_MT_CMD_CTX *Ctx);
+STATIC EFI_STATUS OknMT_ProcessJsonCmd_MT86Status(OKN_MT_CMD_CTX *Ctx);
+STATIC EFI_STATUS OknMT_ProcessJsonCmd_MT86Abort(OKN_MT_CMD_CTX *Ctx);
+STATIC EFI_STATUS OknMT_ProcessJsonCmd_MT86Start(OKN_MT_CMD_CTX *Ctx);
+STATIC EFI_STATUS OknMT_ProcessJsonCmd_Reply9527(OKN_MT_CMD_CTX *Ctx);
+STATIC EFI_STATUS OknMT_ProcessJsonCmd_HwInfo(OKN_MT_CMD_CTX *Ctx);
+STATIC EFI_STATUS OknMT_ProcessJsonCmd_ReadSPD(OKN_MT_CMD_CTX *Ctx);
+STATIC EFI_STATUS OknMT_ProcessJsonCmd_GetMemConfig(OKN_MT_CMD_CTX *Ctx);
+STATIC EFI_STATUS OknMT_ProcessJsonCmd_GetMemConfigReal(OKN_MT_CMD_CTX *Ctx);
+STATIC EFI_STATUS OknMT_ProcessJsonCmd_SetMemConfig(OKN_MT_CMD_CTX *Ctx);
+STATIC EFI_STATUS OknMT_ProcessJsonCmd_ResetSystem(OKN_MT_CMD_CTX *Ctx);
+/**STATIC函数 前置定义区域3**************************************************************/
+STATIC EFI_STATUS Cmd_SetAmtConfig(IN OKN_MEMORY_TEST_PROTOCOL *pProto, IN CONST cJSON *pJsTree);
+STATIC EFI_STATUS Cmd_MT86Status(OUT cJSON *pJsTree);
+STATIC VOID       Cmd_MT86Abort(VOID);
+STATIC EFI_STATUS Cmd_MT86Start(IN cJSON *pJsTree);
+STATIC EFI_STATUS Cmd_Reply9527(OUT cJSON *pJsTree);
+STATIC EFI_STATUS Cmd_HwInfo(IN OKN_MEMORY_TEST_PROTOCOL *pProto, OUT cJSON *pJsTree);
+STATIC EFI_STATUS Cmd_ReadSPD(IN OKN_MEMORY_TEST_PROTOCOL *pProto, IN OUT cJSON *pJsTree);
+STATIC EFI_STATUS Cmd_GetMemConfig(IN OKN_MEMORY_TEST_PROTOCOL *pProto, OUT cJSON *pJsTree);
+STATIC EFI_STATUS Cmd_GetMemConfigReal(IN OKN_MEMORY_TEST_PROTOCOL *pProto, OUT cJSON *pJsTree);
+STATIC EFI_STATUS Cmd_SetMemConfig(IN OKN_MEMORY_TEST_PROTOCOL *pProto, IN CONST cJSON *pJsTree);
+STATIC EFI_STATUS Cmd_ResetSystem(IN OUT cJSON *pTree, OUT EFI_RESET_TYPE *pResetType);
+/*************************************************************************************************/
+#endif  // OKN 前置定义区域 OFF
+
+VOID EFIAPI Udp4ReceiveHandler(IN EFI_EVENT Event, IN VOID *Context)
 {
-  EFI_STATUS Status = 0;
+  UDP4_SOCKET           *Socket;
+  EFI_UDP4_RECEIVE_DATA *RxData;
+  EFI_STATUS             Status;
 
-  cJSON *Cmd = cJSON_GetObjectItemCaseSensitive(Tree, "CMD");
-  if (!Cmd || Cmd->type != cJSON_String) {
+  Socket = (UDP4_SOCKET *)Context;
+  if (Socket == NULL || Socket->Udp4 == NULL) {
     return;
   }
 
-  if (AsciiStrnCmp("testStatus", Cmd->valuestring, 10) == 0) {
-    cJSON *ErrorInfo = cJSON_AddArrayToObject(Tree, "ERRORINFO");
-    cJSON_AddNumberToObject(Tree, "DataMissCompare", MtSupportGetNumErrors());
-    cJSON_AddNumberToObject(Tree, "CorrError", MtSupportGetNumCorrECCErrors());
-    cJSON_AddNumberToObject(Tree, "UncorrError", MtSupportGetNumUncorrECCErrors());
-    // cJSON_AddNumberToObject(Tree, "UnknownError", MtSupportGetNumUnknownSlotErrors());
-    DIMM_ADDRESS_DETAIL *Item = NULL;
+  RxData = Socket->TokenReceive.Packet.RxData;
 
-    for (UINT8 i = 0; i < 4; i++) {
-      Item = DequeueError(&gOknDimmErrorQueue);
-      if (!Item) {
-        break;
-      }
-      cJSON *Detail = cJSON_CreateObject();
-      cJSON_AddNumberToObject(Detail, "Socket", Item.SocketId);
-      cJSON_AddNumberToObject(Detail, "MemCtrl", Item.MemCtrlId);
-      cJSON_AddNumberToObject(Detail, "Channel", Item.MemCtrlId * 2 + Item.ChannelId);
-      cJSON_AddNumberToObject(Detail, "Dimm", 0);
-      cJSON_AddNumberToObject(Detail, "Rank", Item.RankId);
-      cJSON_AddNumberToObject(Detail, "SubCh", Item.SubChId);
-      cJSON_AddNumberToObject(Detail, "BG", Item.BankGroup);
-      cJSON_AddNumberToObject(Detail, "Bank", Item.Bank);
-      cJSON_AddNumberToObject(Detail, "Row", Item.Row);
-      cJSON_AddNumberToObject(Detail, "Col", Item.Column);
-      cJSON_AddItemToArray(ErrorInfo, Detail);
-    }
-
-    CHAR16 UnicodeBuf[OKN_BUF_SIZE] = {0};
-    CHAR8  AsciiBuf[OKN_BUF_SIZE]   = {0};
-    GetStringById(STRING_TOKEN(gCustomTestList[gOknMT86TestID].NameStrId), UnicodeBuf, BUF_SIZE);
-    UnicodeStrToAsciiStrS(UnicodeBuf, AsciiBuf, OKN_BUF_SIZE);
-    cJSON_AddStringToObject(Tree, "NAME", AsciiBuf);
-    cJSON_AddNumberToObject(Tree, "ID", gOknMT86TestID + 47);
-    switch (mPatternUI.NewSize) {
-      case 4:  AsciiSPrint(AsciiBuf, OKN_BUF_SIZE, "0x%08X", mPatternUI.NewPattern[0]); break;
-      case 8:  AsciiSPrint(AsciiBuf, OKN_BUF_SIZE, "0x%016lX", *((UINT64 *)mPatternUI.NewPattern)); break;
-      case 16: AsciiSPrint(AsciiBuf, OKN_BUF_SIZE, "0x%08X%08X", mPatternUI.NewPattern[0], mPatternUI.NewPattern[1]); break;
-    }
-    cJSON_AddStringToObject(Tree, "PATTERN_NEW", gBuffer);
-    cJSON_AddNumberToObject(Tree, "PROGRESS", gOknLastPercent);
-    // cJSON_AddNumberToObject(Tree, "MEMSTART", gStartAddr);
-    // cJSON_AddNumberToObject(Tree, "MEMEND", gEndAddr);
-    cJSON_AddNumberToObject(Tree, "STATUS", gOknTestStatus);
+  // 1) Token 完成但没有数据：按 UEFI UDP4 约定, 重新投递 Receive()
+  if (NULL == RxData) {
+    Socket->TokenReceive.Packet.RxData = NULL;
+    Socket->Udp4->Receive(Socket->Udp4, &Socket->TokenReceive);
+    return;
   }
-  else if (AsciiStrnCmp("testStart", Cmd->valuestring, 9) == 0) {
-    gOknLastPercent = 0;
-    InitErrorQueue(&gOknDimmErrorQueue);
-    gOknTestPause = FALSE;
 
-    cJSON *Id = cJSON_GetObjectItemCaseSensitive(Tree, "ID");
-    if (Id == NULL || Id->type != cJSON_Number || Id->valueu64 > gNumCustomTests + 47 || Id->valueu64 < 47) {
-      return;
-    }
-    for (UINT8 i = 0; i < gNumCustomTests; i++) {
-      gCustomTestList[i].Enabled = FALSE;
-    }
-    gCustomTestList[Id->valueu64 - 47].Enabled = TRUE;
-    gOknMT86TestID                             = (INT8)(Id->valueu64 - 47);
-    gNumPasses                                 = 1;
-    gOknTestStart                              = TRUE;
-    gOknTestStatus                             = 1;
-
-    cJSON_AddBoolToObject(Tree, "SUCCESS", gOknTestStart);
-    cJSON *SlotInfo = cJSON_AddArrayToObject(Tree, "SLOTINFO");
-
-    UINT8 Online  = 0;
-    INT32 RamTemp = 0;
-    int   index   = 0;
-    MtSupportGetTSODInfo(&RamTemp, 0);
-    UINT8 _socket = 0, _channel = 0, socket = 0, channel = 0;
-    for (UINT8 i = 0; i < g_numSMBIOSMem; i++) {
-      socket      = i / 8;
-      channel     = i % 8;
-      _socket     = channel % 2;
-      _channel    = ((socket << 3) + channel) / 2;
-      cJSON *Info = cJSON_CreateObject();
-      if (mSpdTableDDR[_channel][_socket][0] != 0) {
-        Online  = 1;
-        RamTemp = g_MemTSODInfo[index++].temperature;
-      }
-      else {
-        Online  = 0;
-        RamTemp = 0;
-      }
-      cJSON_AddNumberToObject(Info, "ONLINE", Online);
-      cJSON_AddNumberToObject(Info, "RAMTEMP", RamTemp);
-      cJSON_AddItemToArray(SlotInfo, Info);
-    }
-    cJSON_AddNumberToObject(Tree, "STATUS", gOknTestStart);
+  // 2) 若 Receive 被 Abort：回收 RxData 并退出
+  if (EFI_ABORTED == Socket->TokenReceive.Status) {
+    gBS->SignalEvent(RxData->RecycleSignal);
+    Socket->TokenReceive.Packet.RxData = NULL;
+    return;
   }
-  else if (AsciiStrnCmp("testStop", Cmd->valuestring, 8) == 0) {
-    cJSON_AddBoolToObject(Tree, "SUCCESS", TRUE);
-    MtSupportAbortTesting();
-    gOknTestStart  = FALSE;  // fix duplicate test
-    gOknTestStatus = 2;
-    // gTestStop = TRUE;
-  }
-  else if (AsciiStrnCmp("areyouok", Cmd->valuestring, 8) == 0) {
-    cJSON_AddBoolToObject(Tree, "SUCCESS", TRUE);
-    // 关键：MAC/IP 来自“当前接收该包的 NIC”
-    if (gJsonCtxSocket != NULL) {
-      AsciiSPrint(gOknAsciiSPrintBuffer,
-                  OKN_BUF_SIZE,
-                  "%02x:%02x:%02x:%02x:%02x:%02x",
-                  gJsonCtxSocket->NicMac[0],
-                  gJsonCtxSocket->NicMac[1],
-                  gJsonCtxSocket->NicMac[2],
-                  gJsonCtxSocket->NicMac[3],
-                  gJsonCtxSocket->NicMac[4],
-                  gJsonCtxSocket->NicMac[5]);
-      cJSON_AddStringToObject(Tree, "MAC", gBuffer);
 
-      if (gJsonCtxSocket->NicIpValid) {
-        AsciiSPrint(gBuffer,
-                    BUF_SIZE,
-                    "%d.%d.%d.%d",
-                    gJsonCtxSocket->NicIp.Addr[0],
-                    gJsonCtxSocket->NicIp.Addr[1],
-                    gJsonCtxSocket->NicIp.Addr[2],
-                    gJsonCtxSocket->NicIp.Addr[3]);
-        cJSON_AddStringToObject(Tree, "IP", gBuffer);
+  // 3) 空包：回收并重新投递
+  if (RxData->DataLength == 0 || RxData->FragmentCount == 0 || RxData->FragmentTable[0].FragmentBuffer == NULL ||
+      RxData->FragmentTable[0].FragmentLength == 0) {
+    gBS->SignalEvent(RxData->RecycleSignal);
+    Socket->TokenReceive.Packet.RxData = NULL;
+    Socket->Udp4->Receive(Socket->Udp4, &Socket->TokenReceive);
+    return;
+  }
+
+  // 4) 首包绑定：选择第一个收到包的 NIC, 其它 RX socket 全部禁用
+  if (gOknUdpRxActiveSocket == NULL) {
+    gOknUdpRxActiveSocket   = Socket;
+    gOknUdpRxActiveSbHandle = Socket->ServiceBindingHandle;
+
+    for (UINTN i = 0; i < gOknUdpRxSocketCount; i++) {
+      if (gOknUdpRxSockets[i] != NULL && gOknUdpRxSockets[i] != Socket) {
+        DisableUdpRxSocket(gOknUdpRxSockets[i]);
       }
+    }
+  }
+
+  // 5) 非选中 NIC 上来的包直接丢弃（但要回收 RxData）
+  if (Socket != gOknUdpRxActiveSocket) {
+    gBS->SignalEvent(RxData->RecycleSignal);
+    Socket->TokenReceive.Packet.RxData = NULL;
+    return;
+  }
+
+  // 6) 懒创建 TX socket：只创建一次, 绑定到选中的 SB handle
+  //    注意：NotifyTransmit 改为 Udp4TxFreeHandler, 用于释放本次发送的内存
+  if (gOknUdpSocketTransmit == NULL && gOknUdpRxActiveSbHandle != NULL) {
+    EFI_UDP4_CONFIG_DATA TxCfg = {
+        TRUE,            // AcceptBroadcast
+        FALSE,           // AcceptPromiscuous
+        FALSE,           // AcceptAnyPort
+        TRUE,            // AllowDuplicatePort
+        0,               // TypeOfService
+        16,              // TimeToLive
+        TRUE,            // DoNotFragment
+        0,               // ReceiveTimeout
+        0,               // TransmitTimeout
+        TRUE,            // UseDefaultAddress
+        {{0, 0, 0, 0}},  // StationAddress
+        {{0, 0, 0, 0}},  // SubnetMask
+        5566,            // StationPort
+        {{0, 0, 0, 0}},  // RemoteAddress (unused when using UdpSessionData)
+        0,               // RemotePort    (unused when using UdpSessionData)
+    };
+
+    EFI_STATUS TxStatus;
+
+    TxStatus = CreateUdp4SocketByServiceBindingHandle(
+        gOknUdpRxActiveSbHandle,
+        &TxCfg,
+        (EFI_EVENT_NOTIFY)Udp4NullHandler,    // Tx socket 不需要 Receive 回调
+        (EFI_EVENT_NOTIFY)Udp4TxFreeHandler,  // TX 完成释放资源: Udp4TxFreeHandler
+        &gOknUdpSocketTransmit);
+
+    if (EFI_ERROR(TxStatus)) {
+      Print(L"[UDP] Create TX socket failed: %r\n", TxStatus);
+      gOknUdpSocketTransmit = NULL;
     }
     else {
-      // 兜底：至少别填错
-      cJSON_AddStringToObject(Tree, "MAC", "00:00:00:00:00:00");
-      cJSON_AddStringToObject(Tree, "IP", "0.0.0.0");
+      // 初始化 TX 内存追踪字段（需要你在 UDP4_SOCKET 结构体中加入这些字段）
+      gOknUdpSocketTransmit->TxPayload    = NULL;
+      gOknUdpSocketTransmit->TxSession    = NULL;
+      gOknUdpSocketTransmit->TxInProgress = FALSE;
     }
-
-    AsciiSPrint(gBuffer, BUF_SIZE, "mt86-v%d.%d", PROGRAM_VERSION_MAJOR, PROGRAM_VERSION_MINOR);
-    cJSON_AddStringToObject(Tree, "FW", gBuffer);
   }
-  else if (AsciiStrnCmp("connect", Cmd->valuestring, 7) == 0) {
-    // 1. 获取TSOD模块数量, 是整个系统的TSOD模块的数量, 不是单个DIMM的TSOD数量
-    MtSupportGetTSODInfo(NULL, 0);  // 只是为了更新 g_numTSODModules, 参数1是NULL的话, 参数2必须是0
-    cJSON_AddNumberToObject(Tree, "TSOD_CNT", g_numTSODModules);  // 之前是"RESULT"
 
-    // 2. 获取 CPU 信息
-    do {
-      EFI_SMBIOS_HANDLE    SmbiosHandle;
-      EFI_SMBIOS_PROTOCOL *pSmbios;
-      SMBIOS_TABLE_TYPE4  *pSmbiosType4Record;
-      EFI_SMBIOS_TYPE      SmbiosType;
+  if (gOknUdpSocketTransmit == NULL) {
+    gBS->SignalEvent(RxData->RecycleSignal);
+    Socket->TokenReceive.Packet.RxData = NULL;
+    Socket->Udp4->Receive(Socket->Udp4, &Socket->TokenReceive);
+    return;
+  }
 
-      SmbiosHandle = SMBIOS_HANDLE_PI_RESERVED;
-      SmbiosType   = EFI_SMBIOS_TYPE_PROCESSOR_INFORMATION;
-      Status       = gBS->LocateProtocol(&gEfiSmbiosProtocolGuid, NULL, (VOID **)&pSmbios);
-      if (Status == 0) {
-        while (1) {
-          Status = pSmbios->GetNext(pSmbios,
-                                    &SmbiosHandle,
-                                    &SmbiosType,
-                                    (EFI_SMBIOS_TABLE_HEADER **)&pSmbiosType4Record,
-                                    NULL);
-          if (TRUE == EFI_ERROR(Status)) {
-            break;
+  // 7) 若上一次发送还未完成（Token 仍挂起）, 为避免覆盖 Token/内存, 直接丢弃本次回复
+  if (gOknUdpSocketTransmit->TxInProgress) {
+    gBS->SignalEvent(RxData->RecycleSignal);
+    Socket->TokenReceive.Packet.RxData = NULL;
+    Socket->Udp4->Receive(Socket->Udp4, &Socket->TokenReceive);
+    return;
+  }
+
+  // 8) 解析 JSON
+  cJSON *Tree = cJSON_ParseWithLength((CONST CHAR8 *)RxData->FragmentTable[0].FragmentBuffer,
+                                      RxData->FragmentTable[0].FragmentLength);
+
+  if (Tree != NULL) {
+    // 9) 设置 JsonHandler 上下文：确保 areyouok 填的是“当前 NIC”的 MAC/IP
+    gOknJsonCtxSocket = Socket;
+    JsonHandler(Tree);
+    gOknJsonCtxSocket = NULL;
+
+    // 10) 生成响应 JSON（cJSON_PrintUnformatted 返回需要 cJSON_free 的内存）
+    CHAR8 *JsonStr = cJSON_PrintUnformatted(Tree);
+    if (JsonStr != NULL) {
+      UINT32 JsonStrLen = (UINT32)AsciiStrLen(JsonStr);
+
+      // 关键：Transmit 是异步的, 不能直接把 JsonStr 指针塞给 TxData 再立刻释放
+      // 所以这里复制一份到 Pool, TX 完成回调里释放
+      VOID *Payload = AllocateCopyPool(JsonStrLen, JsonStr);
+      cJSON_free(JsonStr);
+
+      if (Payload != NULL && JsonStrLen > 0) {
+        EFI_UDP4_SESSION_DATA *Sess = AllocateZeroPool(sizeof(EFI_UDP4_SESSION_DATA));
+        if (Sess != NULL) {
+          Sess->DestinationAddress = RxData->UdpSession.SourceAddress;
+          Sess->DestinationPort    = RxData->UdpSession.SourcePort;
+          Sess->SourcePort         = 5566;
+          // 可选：如果你在 Socket 里保存了 DHCP IP, 可把源地址也填上
+          // Sess->SourceAddress = Socket->NicIp;
+
+          EFI_UDP4_TRANSMIT_DATA *TxData = gOknUdpSocketTransmit->TokenTransmit.Packet.TxData;
+          ZeroMem(TxData, sizeof(EFI_UDP4_TRANSMIT_DATA));
+          TxData->UdpSessionData                  = Sess;
+          TxData->DataLength                      = JsonStrLen;
+          TxData->FragmentCount                   = 1;
+          TxData->FragmentTable[0].FragmentLength = JsonStrLen;
+          TxData->FragmentTable[0].FragmentBuffer = Payload;
+
+          // 记录待释放资源, TX 完成回调释放
+          gOknUdpSocketTransmit->TxPayload    = Payload;
+          gOknUdpSocketTransmit->TxSession    = Sess;
+          gOknUdpSocketTransmit->TxInProgress = TRUE;
+
+          Status =
+              gOknUdpSocketTransmit->Udp4->Transmit(gOknUdpSocketTransmit->Udp4, &gOknUdpSocketTransmit->TokenTransmit);
+          if (EFI_ERROR(Status)) {
+            // 发送失败：立即释放并复位
+            gOknUdpSocketTransmit->TxInProgress = FALSE;
+            if (gOknUdpSocketTransmit->TxPayload) {
+              FreePool(gOknUdpSocketTransmit->TxPayload);
+              gOknUdpSocketTransmit->TxPayload = NULL;
+            }
+            if (gOknUdpSocketTransmit->TxSession) {
+              FreePool(gOknUdpSocketTransmit->TxSession);
+              gOknUdpSocketTransmit->TxSession = NULL;
+            }
           }
-          CHAR8 *pCpuID, *pCpuVerInfo;
-          Status = SmbiosGetString((CHAR8 *)((UINT8 *)pSmbiosType4Record + pSmbiosType4Record->Hdr.Length),
-                                   pSmbiosType4Record->Socket,
-                                   &pCpuID);
-          Status = SmbiosGetString((CHAR8 *)((UINT8 *)pSmbiosType4Record + pSmbiosType4Record->Hdr.Length),
-                                   pSmbiosType4Record->ProcessorVersion,
-                                   &pCpuVerInfo);
-          cJSON_AddStringToObject(Tree, pCpuID, pCpuVerInfo);
+        }
+        else {
+          FreePool(Payload);
         }
       }
-    } while (0);
-
-    // 3. 获取DIMM信息
-    cJSON *SlotInfo = cJSON_AddArrayToObject(Tree, "DIMM_INFO");
-
-    UINT8 Online    = 0;
-    INT32 RamTemp   = 0;
-    int   ChipWidth = 0;
-    int   NumRanks  = 0;
-    int   NumChips  = 0;
-    int   index     = 0;
-    UINT8 _socket = 0, _channel = 0, socket = 0, channel = 0;
-    MtSupportGetTSODInfo(&RamTemp, 0);
-#ifndef SEAVO
-    for (UINT8 i = 0; i < g_numSMBIOSMem; i++) {
-      socket   = i / 8;
-      channel  = i % 8;
-      _socket  = channel % 2;
-      _channel = ((socket << 3) + channel) / 2;
-#else
-    for (UINT8 i = 0; i < 8; i++) {
-      _channel   = i;
-      UINT8 dimm = 0;
-      _socket    = 0;
-#endif
-      cJSON *Info = cJSON_CreateObject();
-#ifndef SEAVO
-      if (mSpdTableDDR[_channel][_socket][0] != 0) {
-#else
-      if (mSpdTableDDR[_channel][_socket][dimm][0] != 0) {
-#endif
-        Online  = 1;
-        RamTemp = g_MemTSODInfo[index++].temperature;
-        GetMemInfoSpd(i, &ChipWidth, &NumRanks);
-        ChipWidth = MtSupportGetChipWidth(i);
-        NumRanks  = MtSupportGetNumRanks(i);
-        NumChips  = NumRanks * 64 / ChipWidth;
-        cJSON_AddNumberToObject(Info, "CHIPWITH", ChipWidth);
-        cJSON_AddNumberToObject(Info, "RANKS", NumRanks);
-        cJSON_AddNumberToObject(Info, "CHIPS", NumChips);
-      }
       else {
-        Online  = 0;
-        RamTemp = 0;
+        if (Payload)
+          FreePool(Payload);
       }
-      cJSON_AddNumberToObject(Info, "ONLINE", Online);
-      cJSON *Reason = cJSON_AddArrayToObject(Info, "REASON");
-      GetMapOutReason(socket, channel, Reason);
-      cJSON_AddNumberToObject(Info, "RAMTEMP", RamTemp);
-      cJSON_AddItemToArray(SlotInfo, Info);
     }
-  }
-  else if (AsciiStrnCmp("readSPD", Cmd->valuestring, 7) == 0) {
-    readSPD(Tree);
-  }
-  else if (AsciiStrnCmp("testConfigGet", Cmd->valuestring, 13) == 0) {
-    testConfigGet(Tree);
-  }
-  else if (AsciiStrnCmp("testConfigSet", Cmd->valuestring, 13) == 0) {
-    testConfigSet(Tree);
-  }
-  else if (AsciiStrnCmp("testConfigActive", Cmd->valuestring, 16) == 0) {
-    testConfigActive(Tree);
-  }
-  else if (AsciiStrnCmp("reset", Cmd->valuestring, 5) == 0) {
-    cJSON *Type = cJSON_GetObjectItemCaseSensitive(Tree, "TYPE");
-    gOknTestReset  = (UINT8)Type->valueu64;
-  }
-  else if (AsciiStrnCmp("amtStart", Cmd->valuestring, 8) == 0) {
-    amtControl(Tree, TRUE);
+
+    cJSON_Delete(Tree);
   }
 
+  // 11) 回收 RxData 并重新投递 Receive
+  gBS->SignalEvent(RxData->RecycleSignal);
+  Socket->TokenReceive.Packet.RxData = NULL;
+  Socket->Udp4->Receive(Socket->Udp4, &Socket->TokenReceive);
   return;
 }
 
+VOID EFIAPI Udp4NullHandler(IN EFI_EVENT Event, IN VOID *Context) { }
+
+#if 1  // STATIC函数实现区域 ON
+STATIC UINTN OknCmdTableCount(VOID)
+{
+  return sizeof(gOknCmdTable) / sizeof(gOknCmdTable[0]);
+}
+
+STATIC EFI_STATUS OknMT_DispatchJsonCmd(IN OKN_MEMORY_TEST_PROTOCOL *Proto,
+                                        IN OUT cJSON                *Tree,
+                                        OUT EFI_RESET_TYPE          *OutResetType,
+                                        OUT BOOLEAN                 *OutNeedReset)
+{
+  if (Tree == NULL) {
+    return EFI_INVALID_PARAMETER;
+  }
+
+  if (OutNeedReset) {
+    *OutNeedReset = FALSE;
+  }
+  if (OutResetType) {
+    *OutResetType = EfiResetCold;
+  }
+
+  cJSON *Cmd = cJSON_GetObjectItemCaseSensitive(Tree, "CMD");
+  if (Cmd == NULL || Cmd->type != cJSON_String || Cmd->valuestring == NULL) {
+    // 这里你可以用 JsonSetBool/JsonSetString（如果你已有封装）
+    cJSON_AddBoolToObject(Tree, "SUCCESS", FALSE);
+    cJSON_AddStringToObject(Tree, "ERROR", "Missing/invalid CMD (string)");
+    return EFI_INVALID_PARAMETER;
+  }
+
+  OKN_MT_CMD_CTX Ctx;
+  ZeroMem(&Ctx, sizeof(Ctx));
+  Ctx.Proto    = Proto;
+  Ctx.Tree     = Tree;
+  Ctx.ResetReq = FALSE;
+
+  CONST CHAR8 *CmdStr = (CONST CHAR8 *)Cmd->valuestring;
+
+  for (UINTN i = 0; i < OknCmdTableCount(); i++) {
+    if (AsciiStrCmp(CmdStr, gOknCmdTable[i].CmdName) == 0) {
+      EFI_STATUS Status = gOknCmdTable[i].Handler(&Ctx);
+
+      // 可选：统一回显 SUCCESS（如果你希望所有命令都带 SUCCESS）
+      // cJSON_AddBoolToObject(Tree, "SUCCESS", EFI_ERROR(Status) ? FALSE : TRUE);
+
+      if (!EFI_ERROR(Status) && Ctx.ResetReq) {
+        if (OutNeedReset)
+          *OutNeedReset = TRUE;
+        if (OutResetType)
+          *OutResetType = Ctx.ResetType;
+      }
+      return Status;
+    }
+  }
+
+  cJSON_AddBoolToObject(Tree, "SUCCESS", FALSE);
+  cJSON_AddStringToObject(Tree, "ERROR", "Unsupported CMD");
+
+  return EFI_UNSUPPORTED;
+}
+
+// 从 SMBIOS Optional String Area(以 '\0\0' 结束)中, 按 1-based Index 获取字符串指针.
+// Index == 0: SMBIOS 语义为 "Not Specified", 返回 EFI_NOT_FOUND(更合理)
+// 成功: *OutStr 指向原始记录内存(不拷贝)
+STATIC EFI_STATUS OKnSmbiosGetOptionalStringByIndex(IN CONST CHAR8   *OptionalStrStart,
+                                                    IN UINT8          Index,
+                                                    OUT CONST CHAR8 **OutStr)
+{
+  if (OptionalStrStart == NULL || OutStr == NULL) {
+    return EFI_INVALID_PARAMETER;
+  }
+
+  *OutStr = NULL;
+
+  // SMBIOS: 0 means "Not Specified"
+  if (Index == 0) {
+    return EFI_NOT_FOUND;
+  }
+
+  CONST CHAR8 *p = OptionalStrStart;
+
+  // 遍历字符串区: String1\0String2\0...\0\0
+  while (*p != '\0') {
+    // p 指向当前字符串起始
+    Index--;
+    if (Index == 0) {
+      // 可选: 拒绝空串(一般不需要, 空串也算合法值)
+      // if (*p == '\0') return EFI_NOT_FOUND;
+      *OutStr = p;
+      return EFI_SUCCESS;
+    }
+
+    // 跳到下一个字符串起始: 走到 '\0' 后再 +1
+    p += AsciiStrLen(p) + 1;
+  }
+
+  // 到了 '\0\0' 的第一个 '\0', 说明字符串区结束, Index 仍未耗尽 => 越界
+  return EFI_NOT_FOUND;
+}
+
+STATIC EFI_STATUS OknMT_ProcessJsonCmd_SetAmtConfig(OKN_MT_CMD_CTX *Ctx)
+{
+  return Cmd_SetAmtConfig(Ctx->Proto, Ctx->Tree);
+}
+
+STATIC EFI_STATUS OknMT_ProcessJsonCmd_MT86Status(OKN_MT_CMD_CTX *Ctx)
+{
+  return Cmd_MT86Status(Ctx->Tree);
+}
+
+STATIC EFI_STATUS OknMT_ProcessJsonCmd_MT86Abort(OKN_MT_CMD_CTX *Ctx)
+{
+  Cmd_MT86Abort();
+  return EFI_SUCCESS;
+}
+
+STATIC EFI_STATUS OknMT_ProcessJsonCmd_MT86Start(OKN_MT_CMD_CTX *Ctx)
+{
+  return Cmd_MT86Start(Ctx->Tree);
+}
+
+STATIC EFI_STATUS OknMT_ProcessJsonCmd_Reply9527(OKN_MT_CMD_CTX *Ctx)
+{
+  return Cmd_Reply9527(Ctx->Tree);
+}
+
+STATIC EFI_STATUS OknMT_ProcessJsonCmd_HwInfo(OKN_MT_CMD_CTX *Ctx)
+{
+  return Cmd_HwInfo(Ctx->Proto, Ctx->Tree);
+}
+
+STATIC EFI_STATUS OknMT_ProcessJsonCmd_ReadSPD(OKN_MT_CMD_CTX *Ctx)
+{
+  return Cmd_ReadSPD(Ctx->Proto, Ctx->Tree);
+}
+
+STATIC EFI_STATUS OknMT_ProcessJsonCmd_GetMemConfig(OKN_MT_CMD_CTX *Ctx)
+{
+  return Cmd_GetMemConfig(Ctx->Proto, Ctx->Tree);
+}
+
+STATIC EFI_STATUS OknMT_ProcessJsonCmd_GetMemConfigReal(OKN_MT_CMD_CTX *Ctx)
+{
+  return Cmd_GetMemConfigReal(Ctx->Proto, Ctx->Tree);
+}
+
+STATIC EFI_STATUS OknMT_ProcessJsonCmd_SetMemConfig(OKN_MT_CMD_CTX *Ctx)
+{
+  return Cmd_SetMemConfig(Ctx->Proto, Ctx->Tree);
+}
+
+STATIC EFI_STATUS OknMT_ProcessJsonCmd_ResetSystem(OKN_MT_CMD_CTX *Ctx)
+{
+  EFI_STATUS     Status;
+  EFI_RESET_TYPE Rt = EfiResetCold;
+
+  Status = Cmd_ResetSystem(Ctx->Tree, &Rt);
+  if (!EFI_ERROR(Status)) {
+    Ctx->ResetType = Rt;
+    Ctx->ResetReq  = TRUE;
+  }
+  return Status;
+}
+
 /**
- * 处理 amtStart 命令 | 我要改成: SetAmtConfig
+ * 处理 amtStart 命令 | 改成: SetAmtConfig
  */
-EFI_STATUS OknMT_ProcessJsonCmd_SetAmtConfig(IN OKN_MEMORY_TEST_PROTOCOL *pProto, IN CONST cJSON *pJsTree)
+STATIC EFI_STATUS Cmd_SetAmtConfig(IN OKN_MEMORY_TEST_PROTOCOL *pProto, IN CONST cJSON *pJsTree)
 {
   EFI_STATUS Status = EFI_SUCCESS;
 
@@ -301,9 +468,9 @@ EFI_STATUS OknMT_ProcessJsonCmd_SetAmtConfig(IN OKN_MEMORY_TEST_PROTOCOL *pProto
 }
 
 /**
- * 处理 testStatus 命令 | 我要改成: MT86_Status
+ * 处理 testStatus 命令 | 改成: MT86_Status
  */
-EFI_STATUS OknMT_ProcessJsonCmd_MT86Status(OUT cJSON *pJsTree)
+STATIC EFI_STATUS Cmd_MT86Status(OUT cJSON *pJsTree)
 {
   EFI_STATUS Status = EFI_SUCCESS;
 
@@ -362,9 +529,9 @@ EFI_STATUS OknMT_ProcessJsonCmd_MT86Status(OUT cJSON *pJsTree)
 }
 
 /**
- * 处理 testStop 命令 | 我要改成: MT86_Abort
+ * 处理 testStop 命令 | 改成: MT86_Abort
  */
-VOID OknMT_ProcessJsonCmd_MT86Abort(VOID)
+STATIC VOID Cmd_MT86Abort(VOID)
 {
   MtSupportAbortTesting();
   gOknTestStart  = FALSE;  // fix duplicate test
@@ -374,9 +541,9 @@ VOID OknMT_ProcessJsonCmd_MT86Abort(VOID)
 }
 
 /**
- * 处理 testStart 命令 | 我要改成: MT86_Start
+ * 处理 testStart 命令 | 改成: MT86_Start
  */
-EFI_STATUS OknMT_ProcessJsonCmd_MT86Start(IN cJSON *pJsTree)
+STATIC EFI_STATUS Cmd_MT86Start(IN cJSON *pJsTree)
 {
   EFI_STATUS Status = EFI_SUCCESS;
 
@@ -408,40 +575,42 @@ EFI_STATUS OknMT_ProcessJsonCmd_MT86Start(IN cJSON *pJsTree)
 
   return EFI_SUCCESS;
 }
+
 /**
- * 处理 areyouok 命令 | 我要改成: Reply_9527
+ * 处理 areyouok 命令 | 改成: Reply_9527
  */
-EFI_STATUS OknMT_ProcessJsonCmd_Reply9527(OUT cJSON *pJsTree)
+STATIC EFI_STATUS Cmd_Reply9527(OUT cJSON *pJsTree)
 {
-  EFI_STATUS Status = EFI_SUCCESS;
+  EFI_STATUS Status                          = EFI_SUCCESS;
+  CHAR8      AsciiSPrintBuffer[OKN_BUF_SIZE] = {0};
 
   if (NULL == pJsTree) {
     Print(L"[OKN_UEFI_ERR] [%s] JSON tree is NULL\n", __func__);
     return EFI_INVALID_PARAMETER;
   }
 
-  // 关键：MAC/IP 来自“当前接收该包的 NIC”
-  if (gJsonCtxSocket != NULL) {
-    AsciiSPrint(gOknAsciiSPrintBuffer,
+  // 关键: MAC/IP 来自"当前接收该包的 NIC"
+  if (gOknJsonCtxSocket != NULL) {
+    AsciiSPrint(AsciiSPrintBuffer,
                 OKN_BUF_SIZE,
                 "%02x:%02x:%02x:%02x:%02x:%02x",
-                gJsonCtxSocket->NicMac[0],
-                gJsonCtxSocket->NicMac[1],
-                gJsonCtxSocket->NicMac[2],
-                gJsonCtxSocket->NicMac[3],
-                gJsonCtxSocket->NicMac[4],
-                gJsonCtxSocket->NicMac[5]);
-    cJSON_AddStringToObject(pJsTree, "MAC", gOknAsciiSPrintBuffer);
+                gOknJsonCtxSocket->NicMac[0],
+                gOknJsonCtxSocket->NicMac[1],
+                gOknJsonCtxSocket->NicMac[2],
+                gOknJsonCtxSocket->NicMac[3],
+                gOknJsonCtxSocket->NicMac[4],
+                gOknJsonCtxSocket->NicMac[5]);
+    cJSON_AddStringToObject(pJsTree, "MAC", AsciiSPrintBuffer);
 
-    if (gJsonCtxSocket->NicIpValid) {
-      AsciiSPrint(gOknAsciiSPrintBuffer,
+    if (gOknJsonCtxSocket->NicIpValid) {
+      AsciiSPrint(AsciiSPrintBuffer,
                   OKN_BUF_SIZE,
                   "%d.%d.%d.%d",
-                  gJsonCtxSocket->NicIp.Addr[0],
-                  gJsonCtxSocket->NicIp.Addr[1],
-                  gJsonCtxSocket->NicIp.Addr[2],
-                  gJsonCtxSocket->NicIp.Addr[3]);
-      cJSON_AddStringToObject(pJsTree, "IP", gOknAsciiSPrintBuffer);
+                  gOknJsonCtxSocket->NicIp.Addr[0],
+                  gOknJsonCtxSocket->NicIp.Addr[1],
+                  gOknJsonCtxSocket->NicIp.Addr[2],
+                  gOknJsonCtxSocket->NicIp.Addr[3]);
+      cJSON_AddStringToObject(pJsTree, "IP", AsciiSPrintBuffer);
     }
   }
   else {
@@ -450,16 +619,16 @@ EFI_STATUS OknMT_ProcessJsonCmd_Reply9527(OUT cJSON *pJsTree)
     cJSON_AddStringToObject(pJsTree, "IP", "0.0.0.0");
   }
 
-  AsciiSPrint(gOknAsciiSPrintBuffer, OKN_BUF_SIZE, "mt86-v%d.%d", PROGRAM_VERSION_MAJOR, PROGRAM_VERSION_MINOR);
-  cJSON_AddStringToObject(pJsTree, "MT86_FW", gOknAsciiSPrintBuffer);
+  AsciiSPrint(AsciiSPrintBuffer, OKN_BUF_SIZE, "mt86-v%d.%d", PROGRAM_VERSION_MAJOR, PROGRAM_VERSION_MINOR);
+  cJSON_AddStringToObject(pJsTree, "MT86_FW", AsciiSPrintBuffer);
 
   return EFI_SUCCESS;
 }
 
 /**
- * 处理 connect 命令 | 我要改成: HW_Info
+ * 处理 connect 命令 | 改成: HW_Info
  */
-EFI_STATUS OknMT_ProcessJsonCmd_HwInfo(IN OKN_MEMORY_TEST_PROTOCOL *pProto, OUT cJSON *pJsTree)
+STATIC EFI_STATUS Cmd_HwInfo(IN OKN_MEMORY_TEST_PROTOCOL *pProto, OUT cJSON *pJsTree)
 {
   EFI_STATUS Status = EFI_SUCCESS;
 
@@ -479,31 +648,33 @@ EFI_STATUS OknMT_ProcessJsonCmd_HwInfo(IN OKN_MEMORY_TEST_PROTOCOL *pProto, OUT 
 
   // 2. 获取 CPU 信息
   do {
+    EFI_SMBIOS_PROTOCOL *pSmbiosProto;
     EFI_SMBIOS_HANDLE    SmbiosHandle;
-    EFI_SMBIOS_PROTOCOL *pSmbios;
     SMBIOS_TABLE_TYPE4  *pSmbiosType4Record;
     EFI_SMBIOS_TYPE      SmbiosType;
 
     SmbiosHandle = SMBIOS_HANDLE_PI_RESERVED;
     SmbiosType   = EFI_SMBIOS_TYPE_PROCESSOR_INFORMATION;
-    Status       = gBS->LocateProtocol(&gEfiSmbiosProtocolGuid, NULL, (VOID **)&pSmbios);
+    Status       = gBS->LocateProtocol(&gEfiSmbiosProtocolGuid, NULL, (VOID **)&pSmbiosProto);
     if (EFI_SUCCESS == Status) {
       while (1) {
-        Status = pSmbios->GetNext(pSmbios,
-                                  &SmbiosHandle,
-                                  &SmbiosType,
-                                  (EFI_SMBIOS_TABLE_HEADER **)&pSmbiosType4Record,
-                                  NULL);
+        Status = pSmbiosProto->GetNext(pSmbiosProto,
+                                       &SmbiosHandle,
+                                       &SmbiosType,
+                                       (EFI_SMBIOS_TABLE_HEADER **)&pSmbiosType4Record,
+                                       NULL);
         if (TRUE == EFI_ERROR(Status)) {
           break;
         }
         CHAR8 *pCpuID, *pCpuVerInfo;
-        Status = SmbiosGetString((CHAR8 *)((UINT8 *)pSmbiosType4Record + pSmbiosType4Record->Hdr.Length),
-                                 pSmbiosType4Record->Socket,
-                                 &pCpuID);
-        Status = SmbiosGetString((CHAR8 *)((UINT8 *)pSmbiosType4Record + pSmbiosType4Record->Hdr.Length),
-                                 pSmbiosType4Record->ProcessorVersion,
-                                 &pCpuVerInfo);
+        Status =
+            OKnSmbiosGetOptionalStringByIndex((CHAR8 *)((UINT8 *)pSmbiosType4Record + pSmbiosType4Record->Hdr.Length),
+                                              pSmbiosType4Record->Socket,
+                                              &pCpuID);
+        Status =
+            OKnSmbiosGetOptionalStringByIndex((CHAR8 *)((UINT8 *)pSmbiosType4Record + pSmbiosType4Record->Hdr.Length),
+                                              pSmbiosType4Record->ProcessorVersion,
+                                              &pCpuVerInfo);
         cJSON_AddStringToObject(pJsTree, pCpuID, pCpuVerInfo);
       }
     }
@@ -562,7 +733,7 @@ EFI_STATUS OknMT_ProcessJsonCmd_HwInfo(IN OKN_MEMORY_TEST_PROTOCOL *pProto, OUT 
     cJSON_AddNumberToObject(Info, "ONLINE", Online);
     cJSON_AddNumberToObject(Info, "RAM_TEMP", RamTemp0);
     cJSON_AddNumberToObject(Info, "MAP_OUT_REASON_CODE", (UINT32)MapOutReason);
-    cJSON_AddNumberToObject(Info, "SDRAM_DEV_WIDTH", (UINT32)MapOutReason);
+    cJSON_AddNumberToObject(Info, "SDRAM_DEV_WIDTH", (UINT32)SdramDevWidth);
     cJSON_AddNumberToObject(Info, "PKG_RANK_CNT", (UINT32)PkgRanksCnt);
     cJSON_AddNumberToObject(Info, "SDRAM_PKG_CNT", SdramPkgCnt);
     cJSON_AddNumberToObject(Info, "ECC_PKG_CNT", EccPkgCnt);
@@ -576,7 +747,7 @@ EFI_STATUS OknMT_ProcessJsonCmd_HwInfo(IN OKN_MEMORY_TEST_PROTOCOL *pProto, OUT 
 /**
  * 处理 readSPD 命令
  */
-EFI_STATUS OknMT_ProcessJsonCmd_ReadSPD(IN OKN_MEMORY_TEST_PROTOCOL *pProto, IN OUT cJSON *pJsTree)
+STATIC EFI_STATUS Cmd_ReadSPD(IN OKN_MEMORY_TEST_PROTOCOL *pProto, IN OUT cJSON *pJsTree)
 {
   EFI_STATUS Status = EFI_SUCCESS;
 
@@ -590,9 +761,9 @@ EFI_STATUS OknMT_ProcessJsonCmd_ReadSPD(IN OKN_MEMORY_TEST_PROTOCOL *pProto, IN 
 }
 
 /**
- * 处理 testConfigGet 命令 | 我要改成: GetMemConfig
+ * 处理 testConfigGet 命令 | 改成: GetMemConfig
  */
-EFI_STATUS OknMT_ProcessJsonCmd_GetMemConfig(IN OKN_MEMORY_TEST_PROTOCOL *pProto, OUT cJSON *pJsTree)
+STATIC EFI_STATUS Cmd_GetMemConfig(IN OKN_MEMORY_TEST_PROTOCOL *pProto, OUT cJSON *pJsTree)
 {
   EFI_STATUS Status = EFI_SUCCESS;
 
@@ -606,9 +777,9 @@ EFI_STATUS OknMT_ProcessJsonCmd_GetMemConfig(IN OKN_MEMORY_TEST_PROTOCOL *pProto
 }
 
 /**
- * 处理 testConfigActive 命令 | 我要改成: GetMemConfigReal
+ * 处理 testConfigActive 命令 | 改成: GetMemConfigReal
  */
-EFI_STATUS OknMT_ProcessJsonCmd_GetMemConfigReal(IN OKN_MEMORY_TEST_PROTOCOL *pProto, OUT cJSON *pJsTree)
+STATIC EFI_STATUS Cmd_GetMemConfigReal(IN OKN_MEMORY_TEST_PROTOCOL *pProto, OUT cJSON *pJsTree)
 {
   EFI_STATUS Status = EFI_SUCCESS;
 
@@ -622,9 +793,9 @@ EFI_STATUS OknMT_ProcessJsonCmd_GetMemConfigReal(IN OKN_MEMORY_TEST_PROTOCOL *pP
 }
 
 /**
- * 处理 testConfigSet 命令 | 我要改成: SetMemConfig
+ * 处理 testConfigSet 命令 | 改成: SetMemConfig
  */
-EFI_STATUS OknMT_ProcessJsonCmd_SetMemConfig(IN OKN_MEMORY_TEST_PROTOCOL *pProto, IN CONST cJSON *pJsTree)
+STATIC EFI_STATUS Cmd_SetMemConfig(IN OKN_MEMORY_TEST_PROTOCOL *pProto, IN CONST cJSON *pJsTree)
 {
   EFI_STATUS Status = EFI_SUCCESS;
 
@@ -638,10 +809,10 @@ EFI_STATUS OknMT_ProcessJsonCmd_SetMemConfig(IN OKN_MEMORY_TEST_PROTOCOL *pProto
 }
 
 /**
- * 处理 reset 命令 | 我要改成: ResetSystem
+ * 处理 reset 命令 | 改成: ResetSystem
  * MdePkg/Include/Uefi/UefiMultiPhase.h有定义 EFI_RESET_TYPE;
  */
-EFI_STATUS OknMT_ProcessJsonCmd_ResetSystem(IN OUT cJSON *pTree, OUT EFI_RESET_TYPE *pResetType)
+STATIC EFI_STATUS Cmd_ResetSystem(IN OUT cJSON *pTree, OUT EFI_RESET_TYPE *pResetType)
 {
   EFI_STATUS Status;
   UINT32     TypeU32;
@@ -676,3 +847,4 @@ EFI_STATUS OknMT_ProcessJsonCmd_ResetSystem(IN OUT cJSON *pTree, OUT EFI_RESET_T
 
   return EFI_SUCCESS;
 }
+#endif  // STATIC函数实现区域 OFF
