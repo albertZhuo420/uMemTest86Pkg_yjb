@@ -1,21 +1,23 @@
-#ifndef __UDP4_SOCKET_LIB_H__
-#define __UDP4_SOCKET_LIB_H__
+#ifndef _OKN_UDP4_SOCKET_LIB_H_
+#define _OKN_UDP4_SOCKET_LIB_H_
 
 #include <Uefi.h>
-#include <Library/UefiLib.h>
-#include <Library/UefiBootServicesTableLib.h>
-#include <Library/UefiRuntimeServicesTableLib.h>
+
+#include <Library/BaseMemoryLib.h>
 #include <Library/DebugLib.h>
 #include <Library/MemoryAllocationLib.h>
-#include <Library/BaseMemoryLib.h>
 #include <Library/PrintLib.h>
-
+#include <Library/UefiBootServicesTableLib.h>
+#include <Library/UefiLib.h>
+#include <Library/UefiRuntimeServicesTableLib.h>
 #include <Protocol/ServiceBinding.h>
 #include <Protocol/Udp4.h>
 
-#define MAX_UDP4_FRAGMENT_LENGTH    SIZE_2KB
+#define MAX_UDP4_FRAGMENT_LENGTH SIZE_2KB
 
 #define MAX_UDP4_RX_SOCKETS 16
+
+#define OKN_STATION_UDP_PORT 9527
 
 extern UDP4_SOCKET *gOknUdpSocketTransmit = NULL;
 extern UDP4_SOCKET *gOknUdpRxSockets[MAX_UDP4_RX_SOCKETS];
@@ -30,8 +32,8 @@ typedef struct {
   EFI_SERVICE_BINDING_PROTOCOL *ServiceBinding;
 
   // child + protocol
-  EFI_HANDLE                ChildHandle;
-  EFI_UDP4_PROTOCOL        *Udp4;
+  EFI_HANDLE         ChildHandle;
+  EFI_UDP4_PROTOCOL *Udp4;
 
   // config + tokens
   EFI_UDP4_CONFIG_DATA      ConfigData;
@@ -49,9 +51,24 @@ typedef struct {
   BOOLEAN                TxInProgress;
 } UDP4_SOCKET;
 
-EFI_STATUS EFIAPI CreateUdp4SocketByServiceBindingHandle(EFI_HANDLE Udp4ServiceBindingHandle, EFI_UDP4_CONFIG_DATA *ConfigData, EFI_EVENT_NOTIFY NotifyReceive, EFI_EVENT_NOTIFY NotifyTransmit, UDP4_SOCKET **Socket);
-EFI_STATUS EFIAPI CloseUdp4Socket(UDP4_SOCKET *Socket);
-EFI_STATUS EFIAPI AsciiUdp4Write(UDP4_SOCKET *Socket, CONST CHAR8 *FormatString, ...);
-EFI_STATUS        StartUdp4ReceiveOnAllNics(IN EFI_UDP4_CONFIG_DATA *RxCfg);
+EFI_STATUS OknUdp4SocketLibConstructor(VOID);
+EFI_STATUS OknCreateUdp4SocketByServiceBindingHandle(IN EFI_HANDLE            Udp4ServiceBindingHandle,
+                                                     IN EFI_UDP4_CONFIG_DATA *ConfigData,
+                                                     IN EFI_EVENT_NOTIFY      NotifyReceive,
+                                                     IN EFI_EVENT_NOTIFY      NotifyTransmit,
+                                                     OUT UDP4_SOCKET        **Socket);
+EFI_STATUS OknCloseUdp4Socket(IN UDP4_SOCKET *Socket);
+EFI_STATUS OknStartUdp4ReceiveOnAllNics(IN EFI_UDP4_CONFIG_DATA *RxCfg);
+VOID       OknUdp4ReceiveHandler(IN EFI_EVENT Event, IN VOID *Context);
+VOID       OknPollAllUdpSockets(VOID);
+EFI_STATUS OknWaitForUdpNicBind(UINTN TimeoutMs);
+UINTN      OknCountHandlesByProtocol(IN EFI_GUID *Guid);
+VOID       OknDumpNetProtoCounts(VOID);
+VOID       OknConnectAllSnpControllers(VOID);
+BOOLEAN    OknIsZeroIp4(IN EFI_IPv4_ADDRESS *A);
+EFI_STATUS OknEnsureDhcpIp4Ready(EFI_HANDLE Handle, UINTN TimeoutMs, EFI_IPv4_ADDRESS *OutIp);
+VOID       OknUdp4TxFreeHandler(IN EFI_EVENT Event, IN VOID *Context);
+VOID       OknUdp4NullHandler(IN EFI_EVENT Event, IN VOID *Context);
+EFI_STATUS OknAsciiUdp4Write(IN UDP4_SOCKET *Socket, IN CONST CHAR8 *FormatString, ...);
 
-#endif
+#endif  // _OKN_UDP4_SOCKET_LIB_H_

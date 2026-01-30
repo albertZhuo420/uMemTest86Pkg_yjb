@@ -93,18 +93,26 @@ typedef struct {
   UINT32 Row;
 } OKN_PPR_INTERFACE;
 
+typedef enum {
+  DIMM_ERROR_TYPE_UNKOWN,
+  DIMM_ERROR_TYPE_DATA,
+  DIMM_ERROR_TYPE_ECC_CORRECTED,
+  DIMM_ERROR_TYPE_ECC_UNCORRECTED
+} OKN_DIMM_ERROR_TYPE;
+
 typedef struct {
-  UINT8  SocketId;   // 0..1
-  UINT8  MemCtrlId;  // 0..3
-  UINT8  ChannelId;  // 0..1
-  UINT8  DimmSlot;   // 0..1
-  UINT8  RankId;     // 0..1
-  UINT8  SubChId;    // 0..1 always 0 in DDR4
-  UINT8  BankGroup;  // 0..7
-  UINT8  Bank;       // 0..3
-  UINT32 Row;
-  UINT32 Column;
-} DIMM_ADDRESS_DETAIL;
+  UINT8               SocketId;   // 0..1
+  UINT8               MemCtrlId;  // 0..3
+  UINT8               ChannelId;  // 0..1
+  UINT8               DimmSlot;   // 0..1
+  UINT8               RankId;     // 0..1
+  UINT8               SubChId;    // 0..1 always 0 in DDR4
+  UINT8               BankGroup;  // 0..7
+  UINT8               Bank;       // 0..3
+  UINT32              Row;
+  UINT32              Column;
+  OKN_DIMM_ERROR_TYPE Type;
+} OKN_DIMM_ADDRESS_DETAIL;
 
 #pragma pack()
 
@@ -133,10 +141,10 @@ typedef EFI_STATUS(
     EFIAPI *OKN_SPD_READ)(IN UINT8 Socket, IN UINT8 Channel, IN UINT8 Dimm, OUT UINT8 *SpdData, OUT INTN *DataLen);
 typedef EFI_STATUS(EFIAPI *OKN_SPD_WRITE)(IN UINT8 Socket, IN UINT8 Channel, IN UINT8 Dimm, IN CONST UINT8 *SpdData);
 /**
- * 这个函数其实就是egs repo中的: EFI_STATUS SysToDimm(UINTN Address, DIMM_ADDRESS_DETAIL *DimmAddress);
+ * 这个函数其实就是egs repo中的: EFI_STATUS SysToDimm(UINTN Address, OKN_DIMM_ADDRESS_DETAIL *DimmAddress);
  */
-typedef EFI_STATUS(EFIAPI *OKN_ADDRESS_SYSTEM_TO_DIMM)(IN UINTN                 SystemAddress,
-                                                       OUT DIMM_ADDRESS_DETAIL *TranslatedAddress);
+typedef EFI_STATUS(EFIAPI *OKN_ADDRESS_SYSTEM_TO_DIMM)(IN UINTN                     SystemAddress,
+                                                       OUT OKN_DIMM_ADDRESS_DETAIL *TranslatedAddress);
 
 typedef struct {
   UINT32                      Revision;          // XX

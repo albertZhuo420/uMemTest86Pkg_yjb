@@ -7,6 +7,15 @@
 
 #define OKN_MAX_HANDLES_TO_PRINT 64u
 
+#define PrintAndStop()                                                                                                 \
+  do {                                                                                                                 \
+    UINTN         EventIndex_tmp;                                                                                      \
+    EFI_INPUT_KEY key;                                                                                                 \
+    Print(L"[%a:%d] ...\r\n", OknMT_GetFileBaseName(__FILE__), __LINE__);                                              \
+    gBS->WaitForEvent(1, &gST->ConIn->WaitForKey, &EventIndex_tmp);                                                    \
+    gST->ConIn->ReadKeyStroke(gST->ConIn, &key);                                                                       \
+  } while (0)
+
 EFI_STATUS OknMT_LocateProtocol(IN INTN                        RequestedIndex,
                                 OUT OKN_MEMORY_TEST_PROTOCOL **pProto,
                                 OUT EFI_HANDLE                *pChosenHandle,
@@ -316,4 +325,17 @@ EFI_STATUS OknMT_GetSocketChannelDImmPtrsFromJson(IN OKN_MEMORY_TEST_PROTOCOL *p
   pDimm    = pDimm_tmp;
 
   return EFI_SUCCESS;
+}
+
+CONST CHAR8 *OknMT_GetFileBaseName(IN CONST CHAR8 *Path)
+{
+  CONST CHAR8 *p    = Path;
+  CONST CHAR8 *last = Path;
+  while (*p != '\0') {
+    if (*p == '/' || *p == '\\') {
+      last = p + 1;
+    }
+    p++;
+  }
+  return last;
 }

@@ -40,9 +40,7 @@
   THE PROGRAM IS DISTRIBUTED UNDER THE BSD LICENSE ON AN "AS IS"
   BASIS, WITHOUT WARRANTIES OR REPRESENTATIONS OF ANY KIND, EITHER
   EXPRESS OR IMPLIED.
-
 **/
-
 #include <Uefi.h>
 #include <Library/UefiLib.h>
 #include <Library/UefiBootServicesTableLib.h>
@@ -107,7 +105,6 @@
 #include <SysInfoLib/SMBIOS.h>
 
 #include <YAMLLib/yaml.h>
-
 #include <Library/MPSupportLib.h>
 
 #include <Guid/GlobalVariable.h>
@@ -123,11 +120,8 @@
 #include "LineChart.h"
 
 #include "TestResultsStorage.h"
-
 // #include "font.h"
-
 // #include "sha2.h"
-
 #include <Tests/AddressWalkingOnes/AddressWalkingOnes.h>
 #include <Tests/AddressOwn/AddressOwn.h>
 #include <Tests/MovingInv/MovingInv.h>
@@ -171,137 +165,13 @@
 #include "images/ok.h"
 #include "images/qrcode.h"
 #include "images/qrcode_asus.h"
-#include <Library/OKN/PortingLibs/cJSONLib.h>
+// OKN
 #include <Library/OKN/OknUdp4SocketLib.h>
-#include <Library/BaseCryptLib.h>
-#include <Protocol/Smbios.h>
-
-#define OKN_DDR4
-
-#ifdef OKN_DDR4
-
-
-
-STATIC VOID DisableUdpRxSocket(IN UDP4_SOCKET *Sock)
-{
-  if (NULL == Sock || NULL == Sock->Udp4) {
-    return;
-  }
-  // Cancel the pending receive token to stop further callbacks.
-  Sock->Udp4->Cancel(Sock->Udp4, &Sock->TokenReceive);
-}
-
-STATIC volatile BOOLEAN gUdpNicBound = FALSE;
-
-STATIC EFI_STATUS WaitForUdpNicBind(UINTN TimeoutMs);
-STATIC VOID PollAllUdpSockets(VOID);
-
-STATIC EFI_STATUS StartUdp4ReceiveOnAllNics(IN EFI_UDP4_CONFIG_DATA *RxCfg);
-
-VOID EFIAPI Udp4ReceiveHandler(IN EFI_EVENT Event, IN VOID *Context);
-VOID EFIAPI Udp4NullHandler(IN EFI_EVENT Event, IN VOID *Context);
-
-
-// TX 完成后释放本次发送申请的内存, 避免泄漏
-STATIC VOID EFIAPI Udp4TxFreeHandler(IN EFI_EVENT Event, IN VOID *Context)
-{
-  UDP4_SOCKET *Sock = (UDP4_SOCKET *)Context;
-  if (NULL == Sock) {
-    return;
-  }
-
-  // 释放本次发送的 Payload（我们在 ReceiveHandler 里用 AllocateCopyPool 分配）
-  if (Sock->TxPayload != NULL) {
-    FreePool(Sock->TxPayload);
-    Sock->TxPayload = NULL;
-  }
-
-  // 释放本次发送的 SessionData
-  if (Sock->TxSession != NULL) {
-    FreePool(Sock->TxSession);
-    Sock->TxSession = NULL;
-  }
-
-  Sock->TxInProgress = FALSE;
-}
-
-#endif  // OKN_DDR4
-
-#define SEAVO
-#include <Protocol/UsbIo.h>
-#include <Protocol/Ip4Config2.h>
-#include <Protocol/Dhcp4.h>
-
-STATIC UINTN CountHandlesByProtocol(IN EFI_GUID *Guid);
-STATIC VOID DumpNetProtoCounts(VOID);
-STATIC VOID ConnectAllSnpControllers(VOID);
-STATIC EFI_STATUS EnsureDhcpIp4Ready(EFI_HANDLE Handle, UINTN TimeoutMs, EFI_IPv4_ADDRESS *OutIp);
-STATIC BOOLEAN IsZeroIp4(IN EFI_IPv4_ADDRESS *A);
-
-#include <Library/PrintLib.h>
-#include <Library/UefiLib.h>
-
-STATIC CHAR8 gDbgBuf[512];
-
-#define UDP_LOG(fmt, ...) \
-  do { \
-    AsciiSPrint(gDbgBuf, sizeof(gDbgBuf), "[UDP][%a:%d] " fmt "\r\n", __FILE__, __LINE__, ##__VA_ARGS__); \
-    MtSupportDebugWriteLine(gDbgBuf); \
-  } while (0)
-
-#define UDP_LOG_STATUS(tag, st) \
-  do { \
-    UDP_LOG("%a: %r", tag, (st)); \
-  } while (0)
-
-#ifndef BUF_SIZE
-#define BUF_SIZE 512
-#endif
-
-STATIC CHAR8 gUdpDbg[BUF_SIZE];
-
-#define UDPDBG(fmt, ...) \
-  do { \
-    AsciiSPrint(gUdpDbg, sizeof(gUdpDbg), "[UDP][RXALL] " fmt, ##__VA_ARGS__); \
-    MtSupportDebugWriteLine(gUdpDbg); \
-  } while (0)
-
-#define UDPDBG_ST(tag, st) \
-  UDPDBG("%a: %r", tag, (st))
-
-STATIC
-CONST CHAR8*
-OKN_BaseNameA(IN CONST CHAR8* Path)
-{
-  CONST CHAR8* p = Path;
-  CONST CHAR8* last = Path;
-  while (*p != '\0') {
-    if (*p == '/' || *p == '\\') {
-      last = p + 1;
-    }
-    p++;
-  }
-  return last;
-}
-
-#define PrintAndStop() do {\
-	                         UINTN EventIndex_tmp;\
-                            EFI_INPUT_KEY       key;\
-                            Print(L"[%a:%d] ...\r\n", OKN_BaseNameA(__FILE__), __LINE__);\
-                            gBS->WaitForEvent(1, &gST->ConIn->WaitForKey, &EventIndex_tmp);\
-                            gST->ConIn->ReadKeyStroke(gST->ConIn, &key);\
-                       }while(0)
-
-STATIC
-VOID
-PrintIpv4A(IN CONST EFI_IPv4_ADDRESS *Ip)
-{
-    Print(L"%u.%u.%u.%u",
-          (UINTN)Ip->Addr[0],
-          (UINTN)Ip->Addr[1],
-          (UINTN)Ip->Addr[2],
-          (UINTN)Ip->Addr[3]);
-}
+#include <Library/OKN/OknMemTestLib.h>
+extern VOID EFIAPI UnlockAllMemRanges(VOID);
+extern VOID EFIAPI LockAllMemRanges(VOID);
+#define OKN_MT86
+// OKN
 
 #define MIN_SCREEN_WIDTH 1024 // Minimum horizontal resolution
 #define MIN_SCREEN_HEIGHT 768 // Minimum vertical resolution
@@ -1560,546 +1430,7 @@ static EG_PIXEL mEfiColors[16] = {
     {0xff, 0xff, 0xff, 0x00}};
 
 #define WATCHDOG_CODE 0x506173734d61726bULL
-struct PAT_UI {
-	UINT32 CurPattern[4];
-	UINT32 NewPattern[4];
-	UINT8 CurSize;
-	UINT8 NewSize;
-};
-extern struct PAT_UI mPatternUI;
-CONST UINT8  Aes128CbcKey[] = {
-  0xc2, 0x86, 0x69, 0x6d, 0x88, 0x7c, 0x9a, 0xa0, 0x61, 0x1b, 0xbb, 0x3e, 0x20, 0x25, 0xa4, 0x5a
-};
 
-CONST UINT8  Aes128CbcIvec[] = {
-  0x56, 0x2e, 0x17, 0x99, 0x6d, 0x09, 0x3d, 0x28, 0xdd, 0xb3, 0xba, 0x69, 0x5a, 0x2e, 0x6f, 0x58
-};
-VOID *gAesContext;
-
-// #define AES_ENABLE
-
-//OKN_20240829_yjb >>
-EFI_STATUS
-SmbiosGetString(
-  IN      CHAR8                   *OptionalStrStart,
-  IN      UINT8                   Index,
-  OUT     CHAR8                   **String
-  )
-{
-  UINTN          StrSize;
-
-  if (Index == 0) {
-    return EFI_INVALID_PARAMETER;
-  }
-
-  StrSize = 0;
-  do {
-    Index--;
-    OptionalStrStart += StrSize;
-    StrSize           = AsciiStrSize (OptionalStrStart);
-  } while (OptionalStrStart[StrSize] != 0 && Index != 0);
-
-  if ((Index != 0) || (StrSize == 1)) {
-    return EFI_INVALID_PARAMETER;
-  }
-  *String = OptionalStrStart;
-
-  return EFI_SUCCESS;
-}
-
-// extern UINT8 mSpdTableDDR[8][2][1024];
-extern UINT8 mSpdTableDDR[8][2][2][1024];
-
-extern VOID EFIAPI UnlockAllMemRanges(VOID);
-extern VOID EFIAPI LockAllMemRanges(VOID);
-VOID JsonHandler(cJSON *Tree)
-{
-    EFI_STATUS Status = 0;
-    
-    cJSON *Cmd = cJSON_GetObjectItemCaseSensitive(Tree, "CMD");
-    if (!Cmd || Cmd->type != cJSON_String)
-        return;
-    if (AsciiStrnCmp("testStatus", Cmd->valuestring, 10) == 0) {
-        cJSON *ErrorInfo = cJSON_AddArrayToObject(Tree, "ERRORINFO");
-        cJSON_AddNumberToObject(Tree, "DataMissCompare", MtSupportGetNumErrors());
-        cJSON_AddNumberToObject(Tree, "CorrError", MtSupportGetNumCorrECCErrors());
-        cJSON_AddNumberToObject(Tree, "UncorrError", MtSupportGetNumUncorrECCErrors());
-        // cJSON_AddNumberToObject(Tree, "UnknownError", MtSupportGetNumUnknownSlotErrors());
-#if 1
-        DIMM_ADDRESS_DETAIL *Item = NULL;
-        // UINT8 Dimm = 0;
-
-
-        // static UINTN addddd = 0x12345678;
-        // if (gOknDimmErrorQueue.Head == gOknDimmErrorQueue.Tail) {
-        //     DIMM_ADDRESS_DETAIL NewItem = {addddd++, 0, 0, 0, 0, 0, 0, 0, 0, 0x10, 0x20, 2};
-        //     EnqueueError(&gOknDimmErrorQueue, &NewItem);
-        // }
-
-
-        for (UINT8 i = 0; i < 4; i++) {
-            Item = DequeueError(&gOknDimmErrorQueue);
-            if (!Item) {
-                break;
-            }
-            cJSON *Detail =  cJSON_CreateObject();
-            // Dimm = Item->SocketId * 8 + Item->MemCtrlId * 2 + Item->ChannelId;
-            AsciiSPrint(gBuffer, BUF_SIZE, "%llx", Item->Address);
-            cJSON_AddStringToObject(Detail, "Address", gBuffer);
-            cJSON_AddNumberToObject(Detail, "Type", Item->Type);
-            cJSON_AddNumberToObject(Detail, "Socket", Item->SocketId);
-            cJSON_AddNumberToObject(Detail, "Channel", Item->MemCtrlId * 2 + Item->ChannelId);
-            cJSON_AddNumberToObject(Detail, "Dimm", 0);
-            cJSON_AddNumberToObject(Detail, "Rank", Item->RankId);
-            cJSON_AddNumberToObject(Detail, "SubCh", Item->SubChId);
-            cJSON_AddNumberToObject(Detail, "BG", Item->BankGroup);
-            cJSON_AddNumberToObject(Detail, "Bank", Item->Bank);
-            cJSON_AddNumberToObject(Detail, "Row", Item->Row);
-            cJSON_AddNumberToObject(Detail, "Col", Item->Column);
-            cJSON_AddItemToArray(ErrorInfo, Detail);
-        }
-#else
-        int ChipWidth = 0;
-        int NumRanks = 0;
-        int NumChips = 0;
-        for (UINT8 i = 0; i < g_numSMBIOSMem; i++) {
-            cJSON *SlotErr = cJSON_CreateArray();
-            cJSON_AddItemToArray(ErrorInfo, SlotErr);
-            if (g_SMBIOSMemDevices[i].smb17.Size != 0) {
-                ChipWidth = MtSupportGetChipWidth(i);
-                NumRanks = MtSupportGetNumRanks(i);
-                NumChips = NumRanks * 64 / ChipWidth;
-                for (int chip = 0; chip < NumChips; chip++)
-                {
-                    int ChipErrs = MtSupportGetNumSlotChipErrors(i, chip);
-                    if (ChipErrs > 0)
-                    {
-                        cJSON *ChipErr = cJSON_CreateObject();
-                        MtSupportGetChipLabel(chip, g_wszBuffer, BUF_SIZE);
-                        UnicodeStrToAsciiStrS(g_wszBuffer, gBuffer, BUF_SIZE);
-                        cJSON_AddStringToObject(ChipErr, "Chip", gBuffer);
-                        cJSON_AddNumberToObject(ChipErr, "ErrorCount", ChipErrs);
-                        cJSON_AddItemToArray(SlotErr, ChipErr);
-                        // TotalChipErrs += ChipErrs;
-                    }
-                }
-            }
-        }
-#endif
-        GetStringById(STRING_TOKEN(gCustomTestList[gOknMT86TestID].NameStrId), g_wszBuffer, BUF_SIZE);
-        UnicodeStrToAsciiStrS(g_wszBuffer, gBuffer, BUF_SIZE);
-        cJSON_AddStringToObject(Tree, "NAME", gBuffer);
-        cJSON_AddNumberToObject(Tree, "ID", gOknMT86TestID + 47);
-        switch (mPatternUI.NewSize)
-        {
-        case 4:
-            AsciiSPrint(gBuffer, BUF_SIZE, "0x%08X", mPatternUI.NewPattern[0]);
-            break;
-        case 8:
-            AsciiSPrint(gBuffer, BUF_SIZE, "0x%016lX", *((UINT64 *)mPatternUI.NewPattern));
-            break;
-        case 16:
-            AsciiSPrint(gBuffer, BUF_SIZE, "0x%08X%08X", mPatternUI.NewPattern[0], mPatternUI.NewPattern[1]);
-            break;
-        }
-        cJSON_AddStringToObject(Tree, "PATTERN", gBuffer);
-        cJSON_AddNumberToObject(Tree, "PROGRESS", gOknLastPercent);
-        // cJSON_AddNumberToObject(Tree, "MEMSTART", gStartAddr);
-        // cJSON_AddNumberToObject(Tree, "MEMEND", gEndAddr);
-        cJSON_AddNumberToObject(Tree, "STATUS", gOknTestStatus);
-    } else if (AsciiStrnCmp("testStart", Cmd->valuestring, 9) == 0) {
-        gOknLastPercent = 0;
-        InitErrorQueue(&gOknDimmErrorQueue);
-        gOknTestPause = FALSE;
-
-        cJSON *Id = cJSON_GetObjectItemCaseSensitive(Tree, "ID");
-        if (Id == NULL || Id->type != cJSON_Number || Id->valueu64 > gNumCustomTests + 47 || Id->valueu64 < 47) {
-            return;
-        }
-        for (UINT8 i = 0; i < gNumCustomTests; i++) {
-            gCustomTestList[i].Enabled = FALSE;
-        }
-        gCustomTestList[Id->valueu64 - 47].Enabled = TRUE;
-        gOknMT86TestID = (INT8)(Id->valueu64 - 47);
-        gNumPasses = 1;
-        gOknTestStart = TRUE;
-        gOknTestStatus = 1;
-
-        cJSON_AddBoolToObject(Tree, "SUCCESS", gOknTestStart);
-        cJSON *SlotInfo = cJSON_AddArrayToObject(Tree, "SLOTINFO");
-
-        UINT8 Online = 0;
-        INT32 RamTemp = 0;
-        int index = 0;
-        MtSupportGetTSODInfo(&RamTemp, 0);
-        UINT8 _socket = 0, _channel = 0, socket = 0, channel = 0;
-        for (UINT8 i = 0; i < g_numSMBIOSMem; i++) {
-            socket = i / 8;
-            channel = i % 8;
-            _socket = channel % 2;
-            _channel = ((socket << 3) + channel) / 2;
-            cJSON *Info = cJSON_CreateObject();
-            if (mSpdTableDDR[_channel][_socket][0] != 0) {
-                Online = 1;
-                RamTemp = g_MemTSODInfo[index++].temperature;
-            } else {
-                Online = 0;
-                RamTemp = 0;
-            }
-            cJSON_AddNumberToObject(Info, "ONLINE", Online);
-            cJSON_AddNumberToObject(Info, "RAMTEMP", RamTemp);
-            cJSON_AddItemToArray(SlotInfo, Info);
-        }
-        cJSON_AddNumberToObject(Tree, "STATUS", gOknTestStart);
-        
-    } else if (AsciiStrnCmp("testStop", Cmd->valuestring, 8) == 0) {
-        cJSON_AddBoolToObject(Tree, "SUCCESS", TRUE);
-        MtSupportAbortTesting();
-        gOknTestStart = FALSE;   // fix duplicate test
-        gOknTestStatus = 2;
-        // gTestStop = TRUE;
-    } else if (AsciiStrnCmp("areyouok", Cmd->valuestring, 8) == 0) {
-        cJSON_AddBoolToObject(Tree, "SUCCESS", true);
-        // 关键：MAC/IP 来自“当前接收该包的 NIC”
-        if (gOknJsonCtxSocket != NULL) {
-          AsciiSPrint(gBuffer, BUF_SIZE, "%02x:%02x:%02x:%02x:%02x:%02x",
-                      gOknJsonCtxSocket->NicMac[0], gOknJsonCtxSocket->NicMac[1],
-                      gOknJsonCtxSocket->NicMac[2], gOknJsonCtxSocket->NicMac[3],
-                      gOknJsonCtxSocket->NicMac[4], gOknJsonCtxSocket->NicMac[5]);
-          cJSON_AddStringToObject(Tree, "MAC", gBuffer);
-      
-          if (gOknJsonCtxSocket->NicIpValid) {
-            AsciiSPrint(gBuffer, BUF_SIZE, "%d.%d.%d.%d",
-                        gOknJsonCtxSocket->NicIp.Addr[0], gOknJsonCtxSocket->NicIp.Addr[1],
-                        gOknJsonCtxSocket->NicIp.Addr[2], gOknJsonCtxSocket->NicIp.Addr[3]);
-            cJSON_AddStringToObject(Tree, "IP", gBuffer);
-          }
-        } else {
-          // 兜底：至少别填错
-          cJSON_AddStringToObject(Tree, "MAC", "00:00:00:00:00:00");
-          cJSON_AddStringToObject(Tree, "IP",  "0.0.0.0");
-        }
-      
-        AsciiSPrint(gBuffer, BUF_SIZE, "mt86-v%d.%d", PROGRAM_VERSION_MAJOR, PROGRAM_VERSION_MINOR);
-        cJSON_AddStringToObject(Tree, "FW", gBuffer);
-    } else if (AsciiStrnCmp("connect", Cmd->valuestring, 7) == 0) {
-        cJSON_AddNumberToObject(Tree, "RESULT", g_numTSODModules);
-        //OKN_20240829_yjb >>
-        EFI_SMBIOS_HANDLE                     SmbiosHandle;
-        EFI_SMBIOS_PROTOCOL                   *Smbios;
-        SMBIOS_TABLE_TYPE4                    *SmbiosType4Record;
-        EFI_SMBIOS_TYPE                       SmbiosType;
-
-        SmbiosHandle = SMBIOS_HANDLE_PI_RESERVED;
-        SmbiosType = EFI_SMBIOS_TYPE_PROCESSOR_INFORMATION;
-        Status = gBS->LocateProtocol(&gEfiSmbiosProtocolGuid, NULL, (VOID **)&Smbios);
-        if (Status == 0) {
-            while (1) {
-                Status = Smbios->GetNext(Smbios, &SmbiosHandle, &SmbiosType, (EFI_SMBIOS_TABLE_HEADER **)&SmbiosType4Record, NULL);
-                if (EFI_ERROR(Status)) {
-                    break;
-                }
-                CHAR8 *CpuStr, *SocketStr;
-                Status = SmbiosGetString((CHAR8*)((UINT8*)SmbiosType4Record + SmbiosType4Record->Hdr.Length), SmbiosType4Record->Socket, &SocketStr);
-                Status = SmbiosGetString((CHAR8*)((UINT8*)SmbiosType4Record + SmbiosType4Record->Hdr.Length), SmbiosType4Record->ProcessorVersion, &CpuStr);
-                cJSON_AddStringToObject(Tree, SocketStr, CpuStr);
-            }
-        }
-        //OKN_20240829_yjb <<
-        cJSON *SlotInfo = cJSON_AddArrayToObject(Tree, "SLOTINFO");
-        UINT8 Online = 0;
-        INT32 RamTemp = 0;
-        int ChipWidth = 0;
-        int NumRanks = 0;
-        int NumChips = 0;
-        int index = 0;
-        UINT8 _socket = 0, _channel = 0, socket = 0, channel = 0;
-        MtSupportGetTSODInfo(&RamTemp, 0);
-#ifndef SEAVO
-        for (UINT8 i = 0; i < g_numSMBIOSMem; i++) {
-            socket = i / 8;
-            channel = i % 8;
-            _socket = channel % 2;
-            _channel = ((socket << 3) + channel) / 2;
-#else 
-        for (UINT8 i = 0; i < 8; i++) {    
-            _channel = i;
-            UINT8 dimm = 0;
-            _socket = 0;
-#endif
-            cJSON *Info = cJSON_CreateObject();
-#ifndef SEAVO
-            if (mSpdTableDDR[_channel][_socket][0] != 0) {
-#else
-            if (mSpdTableDDR[_channel][_socket][dimm][0] != 0) {
-#endif
-                Online = 1;
-                RamTemp = g_MemTSODInfo[index++].temperature;
-                // GetMemInfoSpd(i, &ChipWidth, &NumRanks);
-                // ChipWidth = MtSupportGetChipWidth(i);
-                // NumRanks = MtSupportGetNumRanks(i);
-                // NumChips = NumRanks * 64 / ChipWidth;
-                cJSON_AddNumberToObject(Info, "CHIPWITH", ChipWidth);
-                cJSON_AddNumberToObject(Info, "RANKS", NumRanks);
-                cJSON_AddNumberToObject(Info, "CHIPS", NumChips);
-            } else {
-                Online = 0;
-                RamTemp = 0;
-            }
-            cJSON_AddNumberToObject(Info, "ONLINE", Online);
-            cJSON *Reason = cJSON_AddArrayToObject(Info, "REASON");
-            GetMapOutReason(socket, channel, Reason);
-            cJSON_AddNumberToObject(Info, "RAMTEMP", RamTemp);
-            cJSON_AddItemToArray(SlotInfo, Info);
-        }
-    } else if (AsciiStrnCmp("readSPD", Cmd->valuestring, 7) == 0) {
-        readSPD(Tree);
-    } else if (AsciiStrnCmp("testConfigGet", Cmd->valuestring, 13) == 0) {
-        testConfigGet(Tree);
-    } else if (AsciiStrnCmp("testConfigSet", Cmd->valuestring, 13) == 0) {
-        testConfigSet(Tree);
-    } else if (AsciiStrnCmp("testConfigActive", Cmd->valuestring, 16) == 0) {
-        testConfigActive(Tree);
-    } else if (AsciiStrnCmp("regRead", Cmd->valuestring, 7) == 0) {
-        regRead(Tree);
-    } else if (AsciiStrnCmp("reset", Cmd->valuestring, 5) == 0) {
-        cJSON *Type = cJSON_GetObjectItemCaseSensitive(Tree, "TYPE");
-        gOknTestReset = (UINT8)Type->valueu64;
-    } else if (AsciiStrnCmp("amtStart", Cmd->valuestring, 8) == 0) {
-        amtControl(Tree, TRUE);
-    } else if (AsciiStrnCmp("amtStop", Cmd->valuestring, 7) == 0) {
-        amtControl(Tree, FALSE);
-    } else if (AsciiStrnCmp("rmtStart", Cmd->valuestring, 8) == 0) {
-        rmtControl(Tree, TRUE);
-    } else if (AsciiStrnCmp("rmtStop", Cmd->valuestring, 7) == 0) {
-        rmtControl(Tree, FALSE);
-    } else if (AsciiStrnCmp("ecsStatus", Cmd->valuestring, 9) == 0) {
-        readEcsReg(Tree);
-    } else if (AsciiStrnCmp("trainMsg", Cmd->valuestring, 8) == 0) {
-        trainMsgCtrl(Tree);
-    } else if (AsciiStrnCmp("cpuSelect", Cmd->valuestring, 9) == 0) {
-        cpuSelect(Tree);
-    } else if (AsciiStrnCmp("spdPrint", Cmd->valuestring, 8) == 0) {
-        spdPrint(Tree);
-    } else if (AsciiStrnCmp("injectPpr", Cmd->valuestring, 9) == 0) {
-        injectPpr(Tree);
-    }
-}
-
-VOID EFIAPI Udp4ReceiveHandler(IN EFI_EVENT Event, IN VOID *Context)
-{
-  UDP4_SOCKET           *Socket;
-  EFI_UDP4_RECEIVE_DATA *RxData;
-  EFI_STATUS            Status;
-
-  Socket = (UDP4_SOCKET *)Context;
-  if (Socket == NULL || Socket->Udp4 == NULL) {
-    return;
-  }
-
-  RxData = Socket->TokenReceive.Packet.RxData;
-
-  // 1) Token 完成但没有数据：按 UEFI UDP4 约定, 重新投递 Receive()
-  if (NULL == RxData) {
-    Socket->TokenReceive.Packet.RxData = NULL;
-    Socket->Udp4->Receive(Socket->Udp4, &Socket->TokenReceive);
-    return;
-  }
-
-  // 2) 若 Receive 被 Abort：回收 RxData 并退出
-  if (EFI_ABORTED == Socket->TokenReceive.Status) {
-    gBS->SignalEvent(RxData->RecycleSignal);
-    Socket->TokenReceive.Packet.RxData = NULL;
-    return;
-  }
-
-  // 3) 空包：回收并重新投递
-  if (RxData->DataLength == 0 || RxData->FragmentCount == 0 ||
-      RxData->FragmentTable[0].FragmentBuffer == NULL ||
-      RxData->FragmentTable[0].FragmentLength == 0) {
-    gBS->SignalEvent(RxData->RecycleSignal);
-    Socket->TokenReceive.Packet.RxData = NULL;
-    Socket->Udp4->Receive(Socket->Udp4, &Socket->TokenReceive);
-    return;
-  }
-
-  // 4) 首包绑定：选择第一个收到包的 NIC, 其它 RX socket 全部禁用
-  if (gOknUdpRxActiveSocket == NULL) {
-    gOknUdpRxActiveSocket   = Socket;
-    gOknUdpRxActiveSbHandle = Socket->ServiceBindingHandle;
-
-    for (UINTN i = 0; i < gOknUdpRxSocketCount; i++) {
-      if (gOknUdpRxSockets[i] != NULL && gOknUdpRxSockets[i] != Socket) {
-        DisableUdpRxSocket(gOknUdpRxSockets[i]);
-      }
-    }
-  }
-
-  // 5) 非选中 NIC 上来的包直接丢弃（但要回收 RxData）
-  if (Socket != gOknUdpRxActiveSocket) {
-    gBS->SignalEvent(RxData->RecycleSignal);
-    Socket->TokenReceive.Packet.RxData = NULL;
-    return;
-  }
-
-  // 6) 懒创建 TX socket：只创建一次, 绑定到选中的 SB handle
-  //    注意：NotifyTransmit 改为 Udp4TxFreeHandler, 用于释放本次发送的内存
-  if (gOknUdpSocketTransmit == NULL && gOknUdpRxActiveSbHandle != NULL) {
-    EFI_UDP4_CONFIG_DATA TxCfg = {
-      TRUE,   // AcceptBroadcast
-      FALSE,  // AcceptPromiscuous
-      FALSE,  // AcceptAnyPort
-      TRUE,   // AllowDuplicatePort
-      0,      // TypeOfService
-      16,     // TimeToLive
-      TRUE,   // DoNotFragment
-      0,      // ReceiveTimeout
-      0,      // TransmitTimeout
-      TRUE,   // UseDefaultAddress
-      {{0, 0, 0, 0}},  // StationAddress
-      {{0, 0, 0, 0}},  // SubnetMask
-      5566,            // StationPort
-      {{0, 0, 0, 0}},  // RemoteAddress (unused when using UdpSessionData)
-      0,               // RemotePort    (unused when using UdpSessionData)
-    };
-
-    EFI_STATUS TxStatus;
-
-    TxStatus = CreateUdp4SocketByServiceBindingHandle(
-                 gOknUdpRxActiveSbHandle,
-                 &TxCfg,
-                 (EFI_EVENT_NOTIFY)Udp4NullHandler,   // Tx socket 不需要 Receive 回调
-                 (EFI_EVENT_NOTIFY)Udp4TxFreeHandler, // TX 完成释放资源: Udp4TxFreeHandler
-                 &gOknUdpSocketTransmit);
-
-    if (EFI_ERROR(TxStatus)) {
-      Print(L"[UDP] Create TX socket failed: %r\n", TxStatus);
-      gOknUdpSocketTransmit = NULL;
-    } else {
-      // 初始化 TX 内存追踪字段（需要你在 UDP4_SOCKET 结构体中加入这些字段）
-      gOknUdpSocketTransmit->TxPayload    = NULL;
-      gOknUdpSocketTransmit->TxSession    = NULL;
-      gOknUdpSocketTransmit->TxInProgress = FALSE;
-    }
-  }
-
-  if (gOknUdpSocketTransmit == NULL) {
-    gBS->SignalEvent(RxData->RecycleSignal);
-    Socket->TokenReceive.Packet.RxData = NULL;
-    Socket->Udp4->Receive(Socket->Udp4, &Socket->TokenReceive);
-    return;
-  }
-
-  // 7) 若上一次发送还未完成（Token 仍挂起）, 为避免覆盖 Token/内存, 直接丢弃本次回复
-  if (gOknUdpSocketTransmit->TxInProgress) {
-    gBS->SignalEvent(RxData->RecycleSignal);
-    Socket->TokenReceive.Packet.RxData = NULL;
-    Socket->Udp4->Receive(Socket->Udp4, &Socket->TokenReceive);
-    return;
-  }
-
-#ifndef AES_ENABLE
-  // 8) 解析 JSON
-  cJSON *Tree = cJSON_ParseWithLength(
-                  (CONST CHAR8 *)RxData->FragmentTable[0].FragmentBuffer,
-                  RxData->FragmentTable[0].FragmentLength);
-
-  if (Tree != NULL) {
-    // 9) 设置 JsonHandler 上下文：确保 areyouok 填的是“当前 NIC”的 MAC/IP
-    gOknJsonCtxSocket = Socket;
-    JsonHandler(Tree);
-    gOknJsonCtxSocket = NULL;
-
-    // 10) 生成响应 JSON（cJSON_PrintUnformatted 返回需要 cJSON_free 的内存）
-    CHAR8 *JsonStr = cJSON_PrintUnformatted(Tree);
-    if (JsonStr != NULL) {
-      UINT32 JsonStrLen = (UINT32)AsciiStrLen(JsonStr);
-
-      // 关键：Transmit 是异步的, 不能直接把 JsonStr 指针塞给 TxData 再立刻释放
-      // 所以这里复制一份到 Pool, TX 完成回调里释放
-      VOID *Payload = AllocateCopyPool(JsonStrLen, JsonStr);
-      cJSON_free(JsonStr);
-
-      if (Payload != NULL && JsonStrLen > 0) {
-        EFI_UDP4_SESSION_DATA *Sess = AllocateZeroPool(sizeof(EFI_UDP4_SESSION_DATA));
-        if (Sess != NULL) {
-          Sess->DestinationAddress = RxData->UdpSession.SourceAddress;
-          Sess->DestinationPort    = RxData->UdpSession.SourcePort;
-          Sess->SourcePort         = 5566;
-          // 可选：如果你在 Socket 里保存了 DHCP IP, 可把源地址也填上
-          // Sess->SourceAddress = Socket->NicIp;
-
-          EFI_UDP4_TRANSMIT_DATA *TxData = gOknUdpSocketTransmit->TokenTransmit.Packet.TxData;
-          ZeroMem(TxData, sizeof(EFI_UDP4_TRANSMIT_DATA));
-          TxData->UdpSessionData = Sess;
-          TxData->DataLength     = JsonStrLen;
-          TxData->FragmentCount  = 1;
-          TxData->FragmentTable[0].FragmentLength = JsonStrLen;
-          TxData->FragmentTable[0].FragmentBuffer = Payload;
-
-          // 记录待释放资源, TX 完成回调释放
-          gOknUdpSocketTransmit->TxPayload    = Payload;
-          gOknUdpSocketTransmit->TxSession    = Sess;
-          gOknUdpSocketTransmit->TxInProgress = TRUE;
-
-          Status = gOknUdpSocketTransmit->Udp4->Transmit(gOknUdpSocketTransmit->Udp4, &gOknUdpSocketTransmit->TokenTransmit);
-          if (EFI_ERROR(Status)) {
-            // 发送失败：立即释放并复位
-            gOknUdpSocketTransmit->TxInProgress = FALSE;
-            if (gOknUdpSocketTransmit->TxPayload) { FreePool(gOknUdpSocketTransmit->TxPayload); gOknUdpSocketTransmit->TxPayload = NULL; }
-            if (gOknUdpSocketTransmit->TxSession) { FreePool(gOknUdpSocketTransmit->TxSession); gOknUdpSocketTransmit->TxSession = NULL; }
-          }
-        } else {
-          FreePool(Payload);
-        }
-      } else {
-        if (Payload) FreePool(Payload);
-      }
-    }
-
-    cJSON_Delete(Tree);
-  }
-#else
-  UINT32 InputSize = ALIGN_VALUE(RxData->FragmentTable[0].FragmentLength, 16);
-  ZeroMem(g_wszBuffer, InputSize);
-  CopyMem(g_wszBuffer, RxData->FragmentTable[0].FragmentBuffer, RxData->FragmentTable[0].FragmentLength);
-  BOOLEAN Ok = AesCbcDecrypt(gAesContext, (UINT8 *)g_wszBuffer, InputSize, Aes128CbcIvec, (UINT8 *)gBuffer);
-  if (Ok) {
-    cJSON *Tree = NULL;
-    Tree = cJSON_ParseWithLength(gBuffer, InputSize);
-    if (Tree) {
-        JsonHandler(Tree);
-        CHAR8 *JsonStr = cJSON_PrintUnformatted(Tree);
-        UINT32 JsonStrLen = (UINT32)AsciiStrLen(JsonStr);
-        InputSize = ALIGN_VALUE(JsonStrLen, 16);
-        ZeroMem(g_wszBuffer, InputSize);
-        CopyMem(g_wszBuffer, JsonStr, JsonStrLen);
-        Ok = AesCbcEncrypt(gAesContext, (UINT8 *)g_wszBuffer, InputSize, Aes128CbcIvec, (UINT8 *)gBuffer);
-        if (Ok) {
-            EFI_UDP4_TRANSMIT_DATA *TxData = gOknUdpSocketTransmit->TokenTransmit.Packet.TxData;
-            ZeroMem(TxData, sizeof(EFI_UDP4_TRANSMIT_DATA));
-            TxData->DataLength = InputSize;
-            TxData->FragmentCount = 1;
-            TxData->FragmentTable[0].FragmentLength = InputSize;
-            TxData->FragmentTable[0].FragmentBuffer = gBuffer;
-            gOknUdpSocketTransmit->Udp4->Transmit(gOknUdpSocketTransmit->Udp4, &gOknUdpSocketTransmit->TokenTransmit);
-        }
-        cJSON_Delete(Tree);
-    }
-  }
-#endif
-
-  // 11) 回收 RxData 并重新投递 Receive
-  gBS->SignalEvent(RxData->RecycleSignal);
-  Socket->TokenReceive.Packet.RxData = NULL;
-  Socket->Udp4->Receive(Socket->Udp4, &Socket->TokenReceive);
-  return;
-}
-
-VOID EFIAPI Udp4NullHandler(IN EFI_EVENT  Event,  IN VOID *Context)
-{
-
-}
 /**
   The user Entry Point for Application. The user code starts with this function
   as the real entry point for the application.
@@ -2359,15 +1690,12 @@ UefiMain(
                 Print(L"PXEProtocol->Mode->PxeReply.Dhcpv4.BootpSiAddr==%d.%d.%d.%d\n", PXEProtocol->Mode->PxeReply.Dhcpv4.BootpSiAddr[0], PXEProtocol->Mode->PxeReply.Dhcpv4.BootpSiAddr[1], PXEProtocol->Mode->PxeReply.Dhcpv4.BootpSiAddr[2], PXEProtocol->Mode->PxeReply.Dhcpv4.BootpSiAddr[3]);
                 Print(L"PXEProtocol->Mode->DhcpAck.Dhcpv4.BootpBootFile=%a\n", PXEProtocol->Mode->DhcpAck.Dhcpv4.BootpBootFile);
                 Print(L"PXEProtocol->Mode->DhcpAck.Dhcpv4.BootpSiAddr=%d.%d.%d.%d\n", PXEProtocol->Mode->DhcpAck.Dhcpv4.BootpSiAddr[0], PXEProtocol->Mode->DhcpAck.Dhcpv4.BootpSiAddr[1], PXEProtocol->Mode->DhcpAck.Dhcpv4.BootpSiAddr[2], PXEProtocol->Mode->DhcpAck.Dhcpv4.BootpSiAddr[3]);
-
 				{
                     UINTN EventIndex;
                     EFI_INPUT_KEY       key;
 
                     gBS->WaitForEvent(1, &gST->ConIn->WaitForKey, &EventIndex);
-
                     gST->ConIn->ReadKeyStroke(gST->ConIn, &key);
-
                 }
 #endif
                 CopyMem(&gTFTPServerIp, &ServerIP, sizeof(gTFTPServerIp));
@@ -3537,8 +2865,7 @@ UefiMain(
 
     // Connect to managment console
     MtSupportPMPConnect();
-    gAesContext = AllocatePool(AesGetContextSize());
-    AesInit(gAesContext, Aes128CbcKey, 128);
+
     EFI_UDP4_CONFIG_DATA RxConfigData = {
                           TRUE,   // AcceptBroadcast
                           FALSE,  // AcceptPromiscuous
@@ -3552,26 +2879,26 @@ UefiMain(
                           TRUE,   // UseDefaultAddress
                           {{0, 0, 0, 0}},  // StationAddress
                           {{0, 0, 0, 0}},  // SubnetMask
-                          5566,            // StationPort
+                          OKN_STATION_UDP_PORT,            // StationPort
                           {{0, 0, 0, 0}},  // RemoteAddress
                           0,               // RemotePort
      };
  
     // Listen on all NICs. The first NIC that receives a packet becomes the bound interface.
-	DumpNetProtoCounts();
+	OknDumpNetProtoCounts();
     gBS->Stall(4000 * 1000); // 1s, 防止一闪而过
-    ConnectAllSnpControllers();
-    DumpNetProtoCounts();
+    OknConnectAllSnpControllers();
+    OknDumpNetProtoCounts();
     gBS->Stall(4000 * 1000); // 1s
 
-    Status = StartUdp4ReceiveOnAllNics(&RxConfigData);
-	Print(L"[UDP] StartUdp4ReceiveOnAllNics: %r, RxSockCnt=%u\n", Status, gOknUdpRxSocketCount);
+    Status = OknStartUdp4ReceiveOnAllNics(&RxConfigData);
+	Print(L"[UDP] OknStartUdp4ReceiveOnAllNics: %r, RxSockCnt=%u\n", Status, gOknUdpRxSocketCount);
     gBS->Stall(4 * 1000 * 1000);
     if (false == EFI_ERROR(Status)) {
 		gOKnSkipWaiting = FALSE;
 		MtSupportDebugWriteLine("Waiting for UDP NIC binding (first packet)...");
 		Print(L"Waiting for UDP NIC binding (first packet)...\n");
-		(VOID)WaitForUdpNicBind(0);
+		(VOID)OknWaitForUdpNicBind(0);
     } 
 	else {
 		// 保持原始语义：UDP 不可用才 skip waiting
@@ -3579,7 +2906,7 @@ UefiMain(
 		gOKnSkipWaiting = TRUE;
     }
 
-    // TX socket will be created lazily in Udp4ReceiveHandler() after NIC binding.
+    // TX socket will be created lazily in OknUdp4ReceiveHandler() after NIC binding.
     gOknUdpSocketTransmit = NULL;
 
     if (gOKnSkipWaiting)
@@ -3953,23 +3280,23 @@ UefiMain(
                 gFailedSPDExpectedValue = 0;
                 MtSupportCheckSPD(SPD_FILENAME, &gFailedSPDMatchIdx, &gFailedSPDMatchByte, &gFailedSPDActualValue, &gFailedSPDExpectedValue);
             }
+#ifndef OKN_MT86
+            Status = MtSupportPMPTestResult();
+            if (Status != EFI_SUCCESS)
+            {
+                if (gAutoMode != AUTOMODE_ON)
+                {
+                    CHAR16 TempBuf2[128];
+                    UnicodeSPrint(TempBuf2, sizeof(TempBuf2), GetStringById(STRING_TOKEN(STR_ERROR_PMP), TempBuf, sizeof(TempBuf)), Status);
 
-            // Status = MtSupportPMPTestResult();
-            // if (Status != EFI_SUCCESS)
-            // {
-            //     if (gAutoMode != AUTOMODE_ON)
-            //     {
-            //         CHAR16 TempBuf2[128];
-            //         UnicodeSPrint(TempBuf2, sizeof(TempBuf2), GetStringById(STRING_TOKEN(STR_ERROR_PMP), TempBuf, sizeof(TempBuf)), Status);
+                    SetMem(&key, sizeof(key), 0);
 
-            //         SetMem(&key, sizeof(key), 0);
-
-            //         MtCreatePopUp(gST->ConOut->Mode->Attribute, &key,
-            //                       TempBuf2,
-            //                       NULL);
-            //     }
-            // }
-
+                    MtCreatePopUp(gST->ConOut->Mode->Attribute, &key,
+                                  TempBuf2,
+                                  NULL);
+                }
+            }
+#endif OKN_MT86
             MtSupportGetTestStartTime(&StartTime);
 
             Prefix[0] = L'\0';
@@ -3977,42 +3304,44 @@ UefiMain(
             UnicodeSPrint(Filename, sizeof(Filename), L"%s%s-%s.html", Prefix, REPORT_BASE_FILENAME, MtSupportGetTimestampStr(&StartTime));
 
             // If automode is enabled, save report
-            // if (gAutoMode != AUTOMODE_OFF && gAutoReport)
-            // {
-            //     MT_HANDLE FileHandle = NULL;
+#ifndef OKN_MT86
+            if (gAutoMode != AUTOMODE_OFF && gAutoReport)
+            {
+                MT_HANDLE FileHandle = NULL;
 
-            //     UnicodeSPrint(Filename, sizeof(Filename), L"%s%s-%s.%s", Prefix, REPORT_BASE_FILENAME, MtSupportGetTimestampStr(&StartTime), gAutoReportFmt == AUTOREPORTFMT_HTML ? L"html" : L"bin");
+                UnicodeSPrint(Filename, sizeof(Filename), L"%s%s-%s.%s", Prefix, REPORT_BASE_FILENAME, MtSupportGetTimestampStr(&StartTime), gAutoReportFmt == AUTOREPORTFMT_HTML ? L"html" : L"bin");
 
-            //     AsciiFPrint(DEBUG_FILE_HANDLE, "Saving test report to %s", Filename);
-            //     Status = MtSupportOpenFile(&FileHandle, Filename, EFI_FILE_MODE_READ | EFI_FILE_MODE_WRITE | EFI_FILE_MODE_CREATE, 0);
-            //     if (FileHandle)
-            //     {
-            //         AsciiFPrint(DEBUG_FILE_HANDLE, "Test report file successfully created");
-            //         if (gAutoReportFmt == AUTOREPORTFMT_HTML)
-            //             MtSupportSaveHTMLCertificate(FileHandle);
-            //         else
-            //             MtSupportSaveBinaryReport(FileHandle);
+                AsciiFPrint(DEBUG_FILE_HANDLE, "Saving test report to %s", Filename);
+                Status = MtSupportOpenFile(&FileHandle, Filename, EFI_FILE_MODE_READ | EFI_FILE_MODE_WRITE | EFI_FILE_MODE_CREATE, 0);
+                if (FileHandle)
+                {
+                    AsciiFPrint(DEBUG_FILE_HANDLE, "Test report file successfully created");
+                    if (gAutoReportFmt == AUTOREPORTFMT_HTML)
+                        MtSupportSaveHTMLCertificate(FileHandle);
+                    else
+                        MtSupportSaveBinaryReport(FileHandle);
 
-            //         Status = MtSupportCloseFile(FileHandle);
-            //     }
+                    Status = MtSupportCloseFile(FileHandle);
+                }
 
-            //     if (Status == EFI_SUCCESS)
-            //         AsciiFPrint(DEBUG_FILE_HANDLE, "Test report was successfully saved");
-            //     else
-            //     {
-            //         AsciiFPrint(DEBUG_FILE_HANDLE, "Failed to save test report: %r", Status);
-            //         if (gAutoMode != AUTOMODE_ON)
-            //         {
-            //             gST->ConOut->ClearScreen(gST->ConOut);
+                if (Status == EFI_SUCCESS)
+                    AsciiFPrint(DEBUG_FILE_HANDLE, "Test report was successfully saved");
+                else
+                {
+                    AsciiFPrint(DEBUG_FILE_HANDLE, "Failed to save test report: %r", Status);
+                    if (gAutoMode != AUTOMODE_ON)
+                    {
+                        gST->ConOut->ClearScreen(gST->ConOut);
 
-            //             SetMem(&key, sizeof(key), 0);
+                        SetMem(&key, sizeof(key), 0);
 
-            //             MtCreatePopUp(gST->ConOut->Mode->Attribute, &key,
-            //                           GetStringById(STRING_TOKEN(STR_ERROR_FILE_OPEN), TempBuf, sizeof(TempBuf)),
-            //                           NULL);
-            //         }
-            //     }
-            // }
+                        MtCreatePopUp(gST->ConOut->Mode->Attribute, &key,
+                                      GetStringById(STRING_TOKEN(STR_ERROR_FILE_OPEN), TempBuf, sizeof(TempBuf)),
+                                      NULL);
+                    }
+                }
+            }
+#endif // OKN_MT86
             if (!gOKnSkipWaiting) {
                 UINTN EventIndex;
                 gBS->WaitForEvent(1, &gST->ConIn->WaitForKey, &EventIndex);
@@ -4671,10 +4000,19 @@ UefiMain(
         }
 
         // If AUTOMODE is enabled, we are done
-        gOknTestStart = FALSE;     // fix duplicate test
-        gOknTestStatus = ((gOknTestStatus == 2) ? 2: 0);
+#ifdef OKN_MT86
+        /**
+         * 原版逻辑是：只要 gAutoMode ==  AUTOMODE_ON, 这层 do-while(1) 的主循环直接 break 出去;
+		 *            break 后 UefiMain() 往下走, 结束本次 UI 主循环 / 退出 App
+         */
+        gOknTestStart  = FALSE;     // fix duplicate test
+		// gOknTestStatus 保留 OKN_TST_Aborted, 否则标记 OKN_TST_Finish
+        gOknTestStatus = ((OKN_TST_Aborted == gOknTestStatus) ? OKN_TST_Aborted : OKN_TST_Finish);
+#endif // OKN_MT86
         if (gAutoMode == AUTOMODE_ON) {
+#ifdef OKN_MT86	
             if (!gOKnSkipWaiting)
+#endif // OKN_MT86
                 break;
         }
         gST->ConOut->ClearScreen(gST->ConOut);
@@ -4696,8 +4034,6 @@ Exit:
         if (SidebarButtons[i].Image)
             egFreeImage(SidebarButtons[i].Image);
     }
-    if (gAesContext)
-        FreePool(gAesContext);
 
     if (SysInfoCPU)
         egFreeImage(SysInfoCPU);
@@ -4794,8 +4130,6 @@ Exit:
     else if (gExitMode == EXITMODE_SHUTDOWN)
         gRT->ResetSystem(EfiResetShutdown, EFI_SUCCESS, 0, NULL);
 
-	PrintAndStop();
-	
     return EFI_SUCCESS;
 }
 
@@ -5563,7 +4897,7 @@ EFI_STATUS
 InitFont(
     CHAR16 *FontFile)
 {
-#if 0
+#ifndef OKN_MT86
     EFI_HII_HANDLE HiiHandle = NULL;
     EFI_STATUS Status = EFI_SUCCESS;
     MT_HANDLE FileHandle = NULL;
@@ -5705,8 +5039,9 @@ Error:
     MtSupportCloseFile(FileHandle);
 
     return Status;
-#endif
-    return 0;
+#else // def OKN_MT86
+    return EFI_SUCCESS;
+#endif // OKN_MT86
 }
 
 /**
@@ -8611,24 +7946,25 @@ STATIC VOID EnableGraphicsMode(BOOLEAN Enable)
 UINT16 MainMenu()
 {
     UINT16 Cmd = ID_BUTTON_SYSINFO;
+
+#ifdef OKN_MT86
     while (TRUE) {
-        if (gOKnSkipWaiting) {
-            if (gOknTestStart) {
-                Cmd = ID_BUTTON_START;
-                gOknTestStart = FALSE;
-                gOknTestStatus = 1;
+        if (TRUE == gOKnSkipWaiting) {
+            if (TRUE == gOknTestStart) {
+                Cmd            = ID_BUTTON_START;
+                gOknTestStart  = FALSE;
+                gOknTestStatus = OKN_TST_Testing;
                 break;
             }
-            if (gOknTestStatus == 0) {
 
-            }
-            if (gOknTestReset == 0 || gOknTestReset == 1 || gOknTestReset == 2) {
+            if (EfiResetCold == gOknTestReset || EfiResetWarm == gOknTestReset || EfiResetShutdown == gOknTestReset) {
                 gRT->ResetSystem(gOknTestReset, 0, 0, NULL);
             }
         }
         gBS->CheckEvent(gST->ConIn->WaitForKey);
     }
     return Cmd;
+#endif // OKN_MT86
 
     DrawWindow();
 
@@ -9394,7 +8730,7 @@ SysInfoScreen(IN UINTN XPos, IN UINTN YPos)
             }
             else // Save system information summary
             {
-#if 0
+#ifndef OKN_MT86
 #ifdef PRO_RELEASE
                 MT_HANDLE FileHandle = NULL;
                 EFI_STATUS Status;
@@ -9438,7 +8774,7 @@ SysInfoScreen(IN UINTN XPos, IN UINTN YPos)
 #else // Pro version only
                 PrintXYAlign((LeftOffset + WindowWidth) / 2, LINENO_YPOS(23), &DEFAULT_TEXT_PIXEL, NULL, ALIGN_CENTRE, GetStringById(STRING_TOKEN(STR_ERROR_PRO_ONLY), ErrorMsg, sizeof(ErrorMsg)));
 #endif
-#endif
+#endif // OKN_MT86
             }
             DrawPointer();
         }
@@ -12072,7 +11408,7 @@ PrevBenchmarkResultsScreen(IN UINTN XPos, IN UINTN YPos)
 
                     if (FileHandle != NULL)
                     {
-#if 0
+#ifndef OKN_MT86
                         TestResultsMetaInfo TestInfo;
                         MTVersion VersionInfo;
                         MEM_RESULTS Header;
@@ -12117,7 +11453,7 @@ PrevBenchmarkResultsScreen(IN UINTN XPos, IN UINTN YPos)
 
                             AsciiFPrint(DEBUG_FILE_HANDLE, "Parsing benchmark results successful. Adding %s to list.", DirEntry->FileName);
                         }
-#endif
+#endif // OKN_MT86
                         MtSupportCloseFile(FileHandle);
                     }
                 }
@@ -13207,12 +12543,12 @@ BOOL RunAdvancedMemoryTest(IN UINTN XPos, IN UINTN YPos, BENCH_CONFIG *Config)
             }
 
             MtSupportEfiFileHandleToMtHandle(FileHandle, &FileMTHandle);
-
-            // if (SaveBenchResults(FileMTHandle, &TestInfo, &Header, StepSizeValues, KBPerSecValues, (int)GetNumSamples()))
-            //     AsciiFPrint(DEBUG_FILE_HANDLE, "Successfully saved benchmark results");
-            // else
-            //     AsciiFPrint(DEBUG_FILE_HANDLE, "Error saving benchmark results");
-
+#ifndef OKN_MT86
+            if (SaveBenchResults(FileMTHandle, &TestInfo, &Header, StepSizeValues, KBPerSecValues, (int)GetNumSamples()))
+                AsciiFPrint(DEBUG_FILE_HANDLE, "Successfully saved benchmark results");
+            else
+                AsciiFPrint(DEBUG_FILE_HANDLE, "Error saving benchmark results");
+#endif // OKN_MT86
             MtSupportCloseFile(FileMTHandle);
             MtSupportCloseFile(DirMTHandle);
         }
@@ -13373,7 +12709,7 @@ void LoadCurBenchResultsToChart(int iSeries, BOOLEAN bAve)
 
 BOOLEAN LoadBenchResultsToChart(MT_HANDLE FileHandle, int iSeries, BOOLEAN bAve)
 {
-#if 0
+#ifndef OKN_MT86
     TestResultsMetaInfo TestInfo;
     MTVersion VersionInfo;
     MEM_RESULTS Header;
@@ -13453,7 +12789,7 @@ BOOLEAN LoadBenchResultsToChart(MT_HANDLE FileHandle, int iSeries, BOOLEAN bAve)
         }
         return TRUE;
     }
-#endif
+#endif // OKN_MT86
     return FALSE;
 }
 
@@ -13543,164 +12879,4 @@ VOID
     FPrint(FileHandle, L"</div>\n");
 
     MtSupportWriteReportFooter(FileHandle);
-}
-
-/****************** OKN  ******************/
-STATIC VOID PollAllUdpSockets(VOID)
-{
-  for (UINTN i = 0; i < gOknUdpRxSocketCount; ++i) {
-    if (gOknUdpRxSockets[i] != NULL && gOknUdpRxSockets[i]->Udp4 != NULL) {
-      gOknUdpRxSockets[i]->Udp4->Poll(gOknUdpRxSockets[i]->Udp4);
-    }
-  }
-
-  if (gOknUdpSocketTransmit != NULL && gOknUdpSocketTransmit->Udp4 != NULL) {
-    gOknUdpSocketTransmit->Udp4->Poll(gOknUdpSocketTransmit->Udp4);
-  }
-}
-
-STATIC EFI_STATUS WaitForUdpNicBind(UINTN TimeoutMs)
-{
-  UINTN Elapsed = 0;
-  UINTN Tick = 0;
-
-  UDP_LOG("WaitForUdpNicBind() start, timeout=%u ms", TimeoutMs);
-
-  while (NULL == gOknUdpRxActiveSocket) {
-    PollAllUdpSockets();
-    gBS->Stall(10 * 1000);
-
-    Elapsed += 10;
-    Tick++;
-
-    if (0 == (Tick % 100)) { // 约 1 秒
-      UDP_LOG("Waiting bind... Elapsed=%u ms Active=%p", Elapsed, gOknUdpRxActiveSocket);
-    }
-
-    if (TimeoutMs != 0 && Elapsed >= TimeoutMs) {
-      UDP_LOG("WaitForUdpNicBind() TIMEOUT");
-      return EFI_TIMEOUT;
-    }
-  }
-
-  UDP_LOG("WaitForUdpNicBind() DONE, Active=%p", gOknUdpRxActiveSocket);
-  return EFI_SUCCESS;
-}
-
-STATIC UINTN CountHandlesByProtocol(IN EFI_GUID *Guid)
-{
-  EFI_STATUS Status;
-  EFI_HANDLE *Handles = NULL;
-  UINTN      Count = 0;
-
-  Status = gBS->LocateHandleBuffer(ByProtocol, Guid, NULL, &Count, &Handles);
-  if (!EFI_ERROR(Status) && Handles != NULL) {
-    FreePool(Handles);
-  } 
-  else {
-    Count = 0;
-  }
-  return Count;
-}
-
-STATIC VOID DumpNetProtoCounts(VOID)
-{
-  EFI_GUID Dhcp4SbGuid = EFI_DHCP4_SERVICE_BINDING_PROTOCOL_GUID; // [NET] DHCP4 SB
-  Print(L"[NET] SNP   handles         : %u\n", (UINT32)CountHandlesByProtocol(&gEfiSimpleNetworkProtocolGuid));
-  Print(L"[NET] MNP   Service Binding : %u\n", (UINT32)CountHandlesByProtocol(&gEfiManagedNetworkServiceBindingProtocolGuid));
-  Print(L"[NET] IP4   Service Binding : %u\n", (UINT32)CountHandlesByProtocol(&gEfiIp4ServiceBindingProtocolGuid));
-  Print(L"[NET] UDP4  Service Binding : %u\n", (UINT32)CountHandlesByProtocol(&gEfiUdp4ServiceBindingProtocolGuid));
-  Print(L"[NET] DHCP4 Service Binding : %u\n", (UINT32)CountHandlesByProtocol(&Dhcp4SbGuid));
-
-  return;
-}
-
-STATIC VOID ConnectAllSnpControllers(VOID)
-{
-  EFI_STATUS Status;
-  EFI_HANDLE *SnpHandles = NULL;
-  UINTN      Count = 0;
-
-  Status = gBS->LocateHandleBuffer(ByProtocol, &gEfiSimpleNetworkProtocolGuid, NULL, &Count, &SnpHandles);
-  Print(L"[NET] Locate SNP: %r, Count=%u\n", Status, (UINT32)Count);
-
-  if (EFI_ERROR(Status) || 0 == Count) {
-    return;
-  }
-
-  for (UINTN i = 0; i < Count; i++) {
-    EFI_STATUS S = gBS->ConnectController(SnpHandles[i], NULL, NULL, TRUE);
-    Print(L"[NET] ConnectController(SNP[%u]): %r\n", (UINT32)i, S);
-  }
-
-  FreePool(SnpHandles);
-  SnpHandles = NULL;
-
-  return;
-}
-
-STATIC BOOLEAN IsZeroIp4(IN EFI_IPv4_ADDRESS *A)
-{
-  return (A->Addr[0] == 0 && A->Addr[1] == 0 && A->Addr[2] == 0 && A->Addr[3] == 0);
-}
-
-STATIC EFI_STATUS EnsureDhcpIp4Ready(EFI_HANDLE Handle, UINTN TimeoutMs, EFI_IPv4_ADDRESS *OutIp)
-{
-  EFI_STATUS                       Status;
-  EFI_IP4_CONFIG2_PROTOCOL         *Ip4Cfg2 = NULL;
-  EFI_IP4_CONFIG2_POLICY           Policy;
-  EFI_IP4_CONFIG2_INTERFACE_INFO   *IfInfo = NULL;
-  UINTN                            IfInfoSize = 0;
-
-  Status = gBS->HandleProtocol(Handle, &gEfiIp4Config2ProtocolGuid, (VOID **)&Ip4Cfg2);
-  if (EFI_ERROR(Status) || NULL == Ip4Cfg2) {
-    Print(L"  IP4Config2 not found: %r\n", Status);
-    return Status;
-  }
-
-  // 1) 设为 DHCP
-  Policy = Ip4Config2PolicyDhcp;
-  Status = Ip4Cfg2->SetData(Ip4Cfg2, Ip4Config2DataTypePolicy, sizeof(Policy), &Policy);
-  Print(L"  IP4Config2 Set Policy DHCP: %r\n", Status);
-  if (EFI_ERROR(Status)) {
-    return Status;
-  }
-
-  // 2) 轮询等待 DHCP 生效（InterfaceInfo.StationAddress != 0）
-  UINTN Waited = 0;
-  while (Waited < TimeoutMs) {
-    IfInfo = NULL;
-    IfInfoSize = 0;
-
-    Status = Ip4Cfg2->GetData(Ip4Cfg2, Ip4Config2DataTypeInterfaceInfo, &IfInfoSize, IfInfo);
-    if (EFI_BUFFER_TOO_SMALL == Status && IfInfoSize > 0) {
-      IfInfo = AllocateZeroPool(IfInfoSize);
-      if (NULL == IfInfo) {
-        return EFI_OUT_OF_RESOURCES;
-      }
-
-      Status = Ip4Cfg2->GetData(Ip4Cfg2, Ip4Config2DataTypeInterfaceInfo, &IfInfoSize, IfInfo);
-      if (!EFI_ERROR(Status) && IfInfo != NULL && !IsZeroIp4(&IfInfo->StationAddress)) {
-        *OutIp = IfInfo->StationAddress;
-
-        Print(L"  DHCP Ready: %d.%d.%d.%d / %d.%d.%d.%d\n",
-              IfInfo->StationAddress.Addr[0], IfInfo->StationAddress.Addr[1],
-              IfInfo->StationAddress.Addr[2], IfInfo->StationAddress.Addr[3],
-              IfInfo->SubnetMask.Addr[0], IfInfo->SubnetMask.Addr[1],
-              IfInfo->SubnetMask.Addr[2], IfInfo->SubnetMask.Addr[3]);
-        FreePool(IfInfo);
-        return EFI_SUCCESS;
-      }
-
-      if (IfInfo) {
-        FreePool(IfInfo);
-      }
-    }
-
-    gBS->Stall(100 * 1000); // 100ms
-    Waited += 100;
-  }
-
-  Print(L"  DHCP timeout (%u ms)\n", (UINT32)TimeoutMs);
-  return EFI_TIMEOUT;
 }

@@ -40,12 +40,12 @@ typedef struct {
   UINT32    Row;
   UINT32    Column;
   UINT32    Type;
-} DIMM_ADDRESS_DETAIL;
+} OKN_DIMM_ADDRESS_DETAIL;
 //OKN_20240822_yjb_EgsAddrTrans <<
 
 //OKN_20240827_yjb_ErrQueue >>
 typedef struct {
-  DIMM_ADDRESS_DETAIL       AddrBuffer[MAX_ADDRESS_RECORD_SIZE];
+  OKN_DIMM_ADDRESS_DETAIL       AddrBuffer[MAX_ADDRESS_RECORD_SIZE];
   UINTN                     Head;
   UINTN                     Tail;
 } DIMM_ERROR_QUEUE;
@@ -63,13 +63,13 @@ VOID trainMsgCtrl(cJSON *Tree);
 VOID readSPD(cJSON *Tree);
 VOID cpuSelect(cJSON *Tree);
 VOID spdPrint(cJSON *Tree);
-EFI_STATUS SysToDimm(UINTN Address, DIMM_ADDRESS_DETAIL *DimmAddress);      //OKN_20240822_yjb_EgsAddrTrans
+EFI_STATUS SysToDimm(UINTN Address, OKN_DIMM_ADDRESS_DETAIL *DimmAddress);      //OKN_20240822_yjb_EgsAddrTrans
 //OKN_20240827_yjb_ErrQueue >>
 VOID InitErrorQueue(DIMM_ERROR_QUEUE *Queue);
 BOOLEAN IsErrorQueueEmpty(DIMM_ERROR_QUEUE *Queue);
 BOOLEAN IsErrorQueueFull(DIMM_ERROR_QUEUE *Queue);
-VOID EnqueueError(DIMM_ERROR_QUEUE *Queue, DIMM_ADDRESS_DETAIL *Item);
-DIMM_ADDRESS_DETAIL *DequeueError(DIMM_ERROR_QUEUE *Queue);
+VOID EnqueueError(DIMM_ERROR_QUEUE *Queue, OKN_DIMM_ADDRESS_DETAIL *Item);
+OKN_DIMM_ADDRESS_DETAIL *DequeueError(DIMM_ERROR_QUEUE *Queue);
 //OKN_20240827_yjb_ErrQueue <<
 VOID GetMemInfoSpd(UINT8 Dimm, INT32 *ChipWidth, INT32 *Ranks);
 VOID injectPpr(cJSON *Tree);

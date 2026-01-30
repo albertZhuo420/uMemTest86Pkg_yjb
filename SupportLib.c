@@ -59,8 +59,10 @@
  */
 
 #include "SupportLib.h"
-#include <Library/IntelPortingLib.h>
-#include <Library/Udp4SocketLib.h>
+#include <Library/OKN/OknMemTestLib.h>
+#ifndef OKN_MT86
+#define OKN_MT86
+#endif // OKN_MT86
 
 #define INT_MAX 2147483647
 #define INT_MIN (-2147483647 - 1)
@@ -157,11 +159,6 @@ static UINT64 mMtrrValidBitsMask;
 static UINT64 mMtrrValidAddressMask;
 static MTRR_SETTINGS mCurMtrrs, mPrevMtrrs;
 static int mFreeMtrrInd = -1;
-extern BOOLEAN              gOknTestStart;
-extern BOOLEAN              gOknTestPause;
-extern UINT8                gOknTestReset;
-extern UINT8                gOknTestStatus;
-extern UDP4_SOCKET          *gOknUdpSocketTransmit;
 
 extern UINT64 gAddrLimitLo;                   // lower address limit
 extern UINT64 gAddrLimitHi;                   // upper address limit
@@ -4144,13 +4141,16 @@ VOID
     ALIGN(16)
     unsigned int errbits128[8];
     __m128i *perrbits128 = (__m128i *)(((UINTN)errbits128 + 0xF) & ~(0xF));
-    DIMM_ADDRESS_DETAIL Detail = {0};
+
+#ifdef OKN_MT86
+    OKN_DIMM_ADDRESS_DETAIL Detail = {0};
     if (SysToDimm(Address, &Detail) == 0) {
         Detail.Type = DIMM_ERROR_TYPE_DATA;
     } else {
         Detail.Type = DIMM_ERROR_TYPE_UNKOWN;
     }
     EnqueueError(&gOknDimmErrorQueue, &Detail);
+#endif // OKN_MT86
 
     SetMem(actual128, sizeof(actual128), 0);
     SetMem(expected128, sizeof(expected128), 0);
@@ -9609,23 +9609,23 @@ UINT16
 EFIAPI
 MtSupportTestConfig()
 {
+#ifdef OKN_MT86
     while (TRUE)
     {
-        if (gOknTestStart) {
-            gOknTestStart = FALSE;
-            gOknTestStatus = 1;
+        if (TRUE == gOknTestStart) {
+            gOknTestStart  = FALSE;
+            gOknTestStatus = OKN_TST_Testing;
             return ID_BUTTON_START;
         }
-        if (gOknTestStatus == 0) {
 
-        }
-        if (gOknTestReset == 0 || gOknTestReset == 1 || gOknTestReset == 2) {
+        if (EfiResetCold == gOknTestReset || EfiResetWarm == gOknTestReset || EfiResetShutdown == gOknTestReset) {
             gRT->ResetSystem(gOknTestReset, 0, 0, NULL);
         }
         gBS->CheckEvent(gST->ConIn->WaitForKey);
         // gBS->Stall(50000);
     }
     return ID_BUTTON_START;
+#endif // OKN_MT86
 
     EFI_INPUT_KEY key;
 

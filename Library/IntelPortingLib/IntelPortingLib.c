@@ -642,7 +642,7 @@ VOID spdPrint(cJSON *Tree)
 }
 
 //OKN_20240822_yjb_EgsAddrTrans >>
-EFI_STATUS SysToDimm(UINTN Address, DIMM_ADDRESS_DETAIL *DimmAddress)
+EFI_STATUS SysToDimm(UINTN Address, OKN_DIMM_ADDRESS_DETAIL *DimmAddress)
 {
   EFI_STATUS Status = 0;
   TRANSLATED_ADDRESS TranslatedAddress = {0};
@@ -675,7 +675,7 @@ EFI_STATUS SysToDimm(UINTN Address, DIMM_ADDRESS_DETAIL *DimmAddress)
 VOID InitErrorQueue(DIMM_ERROR_QUEUE *Queue)
 {
   for (UINT8 i = 0; i < MAX_ADDRESS_RECORD_SIZE; i++) {
-    ZeroMem(&Queue->AddrBuffer[i], sizeof(DIMM_ADDRESS_DETAIL));
+    ZeroMem(&Queue->AddrBuffer[i], sizeof(OKN_DIMM_ADDRESS_DETAIL));
   }
   Queue->Head = 0;
   Queue->Tail = 0;
@@ -688,7 +688,7 @@ BOOLEAN IsErrorQueueFull(DIMM_ERROR_QUEUE *Queue)
 {
   return ((Queue->Tail + 1) % MAX_ADDRESS_RECORD_SIZE) == Queue->Head;
 }
-VOID EnqueueError(DIMM_ERROR_QUEUE *Queue, DIMM_ADDRESS_DETAIL *Item)
+VOID EnqueueError(DIMM_ERROR_QUEUE *Queue, OKN_DIMM_ADDRESS_DETAIL *Item)
 {
   if (IsErrorQueueFull(Queue)) {
     Queue->Head = (Queue->Head + 1) % MAX_ADDRESS_RECORD_SIZE;
@@ -696,12 +696,12 @@ VOID EnqueueError(DIMM_ERROR_QUEUE *Queue, DIMM_ADDRESS_DETAIL *Item)
   Queue->AddrBuffer[Queue->Tail] = *Item;
   Queue->Tail = (Queue->Tail + 1) % MAX_ADDRESS_RECORD_SIZE;
 }
-DIMM_ADDRESS_DETAIL *DequeueError(DIMM_ERROR_QUEUE *Queue)
+OKN_DIMM_ADDRESS_DETAIL *DequeueError(DIMM_ERROR_QUEUE *Queue)
 {
   if (IsErrorQueueEmpty(Queue)) {
     return NULL;
   }
-  DIMM_ADDRESS_DETAIL *Item = &Queue->AddrBuffer[Queue->Head];
+  OKN_DIMM_ADDRESS_DETAIL *Item = &Queue->AddrBuffer[Queue->Head];
   Queue->Head = (Queue->Head + 1) % MAX_ADDRESS_RECORD_SIZE;
   return Item;
 }

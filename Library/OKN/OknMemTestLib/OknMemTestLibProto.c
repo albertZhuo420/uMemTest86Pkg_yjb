@@ -1,9 +1,9 @@
 /**
  * @file
- * 
+ *
  */
 
-#include <Library/OKN/OknMemTestLib/OknMemTestLib.h>
+#include <Library/OKN/OknMemTestLib.h>
 
 #if 1  // 全局变量 区域 ON
 
@@ -128,13 +128,13 @@ EFI_STATUS OknMT_SetAmtConfig(IN OKN_MEMORY_TEST_PROTOCOL *pProto, IN CONST cJSO
   ZeroMem(&AmtCfg, sizeof(AmtCfg));
 
   // 1) 解析 OPTIONS / LOOPS / PPR
-  Status = JsonGetU32FromObject(pJsTree, "OPTIONS", &Options);
+  Status = OknMT_JsonGetU32FromObject(pJsTree, "OPTIONS", &Options);
   if (TRUE == EFI_ERROR(Status)) {
     Print(L"[OKN_UEFI_ERR] Missing/invalid OPTIONS\n");
     return EFI_INVALID_PARAMETER;
   }
 
-  Status = JsonGetU16FromObject(pJsTree, "LOOPS", &Loops);
+  Status = OknMT_JsonGetU16FromObject(pJsTree, "LOOPS", &Loops);
   if (TRUE == EFI_ERROR(Status)) {
     Print(L"[OKN_UEFI_ERR] Missing/invalid LOOPS\n");
     return EFI_INVALID_PARAMETER;
@@ -185,33 +185,33 @@ EFI_STATUS OknMT_SetAmtConfig(IN OKN_MEMORY_TEST_PROTOCOL *pProto, IN CONST cJSO
     // 按映射顺序填充
     // clang-format off
 	// AdvMemTestCondition
-    Status = JsonGetU8FromArray(One, AMT_OPT_IDX_COND, &AmtCfg.AmtOptArr[i].AdvMemTestCondition);
+    Status = OknMT_JsonGetU8FromArray(One, AMT_OPT_IDX_COND, &AmtCfg.AmtOptArr[i].AdvMemTestCondition);
     if (TRUE == EFI_ERROR(Status)) { return EFI_INVALID_PARAMETER; }
     // PmicVddLevel
-    Status = JsonGetU16FromArray(One, AMT_OPT_IDX_VDD, &AmtCfg.AmtOptArr[i].PmicVddLevel);
+    Status = OknMT_JsonGetU16FromArray(One, AMT_OPT_IDX_VDD, &AmtCfg.AmtOptArr[i].PmicVddLevel);
     if (TRUE == EFI_ERROR(Status)) { return EFI_INVALID_PARAMETER; }
     // PmicVddQLevel
-    Status = JsonGetU16FromArray(One, AMT_OPT_IDX_VDDQ, &AmtCfg.AmtOptArr[i].PmicVddQLevel);
+    Status = OknMT_JsonGetU16FromArray(One, AMT_OPT_IDX_VDDQ, &AmtCfg.AmtOptArr[i].PmicVddQLevel);
     if (TRUE == EFI_ERROR(Status)) { return EFI_INVALID_PARAMETER; }
     // TwrValue
-    Status = JsonGetU8FromArray(One, AMT_OPT_IDX_TWR, &AmtCfg.AmtOptArr[i].TwrValue);
+    Status = OknMT_JsonGetU8FromArray(One, AMT_OPT_IDX_TWR, &AmtCfg.AmtOptArr[i].TwrValue);
     if (TRUE == EFI_ERROR(Status)) { return EFI_INVALID_PARAMETER; }
     // TrefiValue
-    Status = JsonGetU16FromArray(One, AMT_OPT_IDX_TREFI, &AmtCfg.AmtOptArr[i].TrefiValue);
+    Status = OknMT_JsonGetU16FromArray(One, AMT_OPT_IDX_TREFI, &AmtCfg.AmtOptArr[i].TrefiValue);
     if (TRUE == EFI_ERROR(Status)) { return EFI_INVALID_PARAMETER; }
     // AdvMemTestCondPause
-    Status = JsonGetU32FromArray(One, AMT_OPT_IDX_PAUSE, &AmtCfg.AmtOptArr[i].AdvMemTestCondPause);
+    Status = OknMT_JsonGetU32FromArray(One, AMT_OPT_IDX_PAUSE, &AmtCfg.AmtOptArr[i].AdvMemTestCondPause);
     if (TRUE == EFI_ERROR(Status)) { return EFI_INVALID_PARAMETER; }
     // BgInterleave
-    Status = JsonGetU8FromArray(One, AMT_OPT_IDX_BGINTLV, &AmtCfg.AmtOptArr[i].BgInterleave);
+    Status = OknMT_JsonGetU8FromArray(One, AMT_OPT_IDX_BGINTLV, &AmtCfg.AmtOptArr[i].BgInterleave);
     if (TRUE == EFI_ERROR(Status)) { return EFI_INVALID_PARAMETER; }
     // AddressMode
-    Status = JsonGetU8FromArray(One, AMT_OPT_IDX_ADDRMODE, &AmtCfg.AmtOptArr[i].AddressMode);
+    Status = OknMT_JsonGetU8FromArray(One, AMT_OPT_IDX_ADDRMODE, &AmtCfg.AmtOptArr[i].AddressMode);
     if (TRUE == EFI_ERROR(Status)) { return EFI_INVALID_PARAMETER; }
     // clang-format on
 
     // Pattern: number 或 string
-    Status = JsonGetU64(cJSON_GetArrayItem(One, AMT_OPT_IDX_PATTERN), &Pattern64);
+    Status = OknMT_JsonGetU64(cJSON_GetArrayItem(One, AMT_OPT_IDX_PATTERN), &Pattern64);
     if (TRUE == EFI_ERROR(Status)) {
       Print(L"[OKN_UEFI_ERR] AMT_OPT_ARR[%d] Pattern invalid\n", i);
       return EFI_INVALID_PARAMETER;
@@ -427,7 +427,7 @@ EFI_STATUS OknMT_ReadSpdToJson(IN OKN_MEMORY_TEST_PROTOCOL *pProto, IN OUT cJSON
 
 EFI_STATUS OknMT_TranslatedAddressFromSystemToDimm(IN OKN_MEMORY_TEST_PROTOCOL *pProto,
                                                    IN UINTN                     SystemAddress,
-                                                   OUT DIMM_ADDRESS_DETAIL     *pTranslatedAddress)
+                                                   OUT OKN_DIMM_ADDRESS_DETAIL     *pTranslatedAddress)
 {
   EFI_STATUS Status = EFI_SUCCESS;
 
@@ -438,7 +438,7 @@ EFI_STATUS OknMT_TranslatedAddressFromSystemToDimm(IN OKN_MEMORY_TEST_PROTOCOL *
   }
 
   // 2) 调用 AddrSys2Dimm
-  DIMM_ADDRESS_DETAIL TranslatedAddr;
+  OKN_DIMM_ADDRESS_DETAIL TranslatedAddr;
   Status = pProto->AddrSys2Dimm(SystemAddress, &TranslatedAddr);
   if (TRUE == EFI_ERROR(Status)) {
     Print(L"[OKN_UEFI_ERR] [%s] AddrSys2Dimm() failed: %r\n", __func__, Status);
@@ -446,7 +446,7 @@ EFI_STATUS OknMT_TranslatedAddressFromSystemToDimm(IN OKN_MEMORY_TEST_PROTOCOL *
   }
 
   // 3) 输出结果
-  CopyMem(pTranslatedAddress, &TranslatedAddr, sizeof(DIMM_ADDRESS_DETAIL));
+  CopyMem(pTranslatedAddress, &TranslatedAddr, sizeof(OKN_DIMM_ADDRESS_DETAIL));
 
   return EFI_SUCCESS;
 }

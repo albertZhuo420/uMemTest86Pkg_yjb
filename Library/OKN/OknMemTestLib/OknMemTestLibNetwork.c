@@ -10,7 +10,7 @@
 #include <uMemTest86.h>
 
 /**
- * UDP4 Rx (Udp4ReceiveHandler)
+ * UDP4 Rx (OknUdp4ReceiveHandler)
  *    ├─ cJSON_ParseWithLength(udp_payload)  -> Tree
  *    ├─ JsonHandler(Tree)                   -> 在 Tree 里加返回字段 / 改全局状态
  *    ├─ cJSON_PrintUnformatted(Tree)        -> JSON response string
@@ -56,14 +56,14 @@ STATIC CONST OKN_MT_CMD_DISPATCH gOknCmdTable[] = {
     CMD_ENTRY("reset", OknMT_ProcessJsonCmd_ResetSystem),
 };
 /**STATIC函数 前置定义区域1**************************************************************/
-STATIC UINTN      OknCmdTableCount(VOID);
+STATIC UINTN      OknMT_CmdTableCount(VOID);
 STATIC EFI_STATUS OknMT_DispatchJsonCmd(IN OKN_MEMORY_TEST_PROTOCOL *Proto,
                                         IN OUT cJSON                *Tree,
                                         OUT EFI_RESET_TYPE          *OutResetType,
                                         OUT BOOLEAN                 *OutNeedReset);
-STATIC EFI_STATUS OKnSmbiosGetOptionalStringByIndex(IN CONST CHAR8   *OptionalStrStart,
-                                                    IN UINT8          Index,
-                                                    OUT CONST CHAR8 **OutStr);
+STATIC EFI_STATUS OknMT_SmbiosGetOptionalStringByIndex(IN CONST CHAR8   *OptionalStrStart,
+                                                       IN UINT8          Index,
+                                                       OUT CONST CHAR8 **OutStr);
 /**STATIC函数 前置定义区域2**************************************************************/
 STATIC EFI_STATUS OknMT_ProcessJsonCmd_SetAmtConfig(OKN_MT_CMD_CTX *Ctx);
 STATIC EFI_STATUS OknMT_ProcessJsonCmd_MT86Status(OKN_MT_CMD_CTX *Ctx);
@@ -91,199 +91,8 @@ STATIC EFI_STATUS Cmd_ResetSystem(IN OUT cJSON *pTree, OUT EFI_RESET_TYPE *pRese
 /*************************************************************************************************/
 #endif  // OKN 前置定义区域 OFF
 
-VOID EFIAPI Udp4ReceiveHandler(IN EFI_EVENT Event, IN VOID *Context)
-{
-  UDP4_SOCKET           *Socket;
-  EFI_UDP4_RECEIVE_DATA *RxData;
-  EFI_STATUS             Status;
-
-  Socket = (UDP4_SOCKET *)Context;
-  if (Socket == NULL || Socket->Udp4 == NULL) {
-    return;
-  }
-
-  RxData = Socket->TokenReceive.Packet.RxData;
-
-  // 1) Token 完成但没有数据：按 UEFI UDP4 约定, 重新投递 Receive()
-  if (NULL == RxData) {
-    Socket->TokenReceive.Packet.RxData = NULL;
-    Socket->Udp4->Receive(Socket->Udp4, &Socket->TokenReceive);
-    return;
-  }
-
-  // 2) 若 Receive 被 Abort：回收 RxData 并退出
-  if (EFI_ABORTED == Socket->TokenReceive.Status) {
-    gBS->SignalEvent(RxData->RecycleSignal);
-    Socket->TokenReceive.Packet.RxData = NULL;
-    return;
-  }
-
-  // 3) 空包：回收并重新投递
-  if (RxData->DataLength == 0 || RxData->FragmentCount == 0 || RxData->FragmentTable[0].FragmentBuffer == NULL ||
-      RxData->FragmentTable[0].FragmentLength == 0) {
-    gBS->SignalEvent(RxData->RecycleSignal);
-    Socket->TokenReceive.Packet.RxData = NULL;
-    Socket->Udp4->Receive(Socket->Udp4, &Socket->TokenReceive);
-    return;
-  }
-
-  // 4) 首包绑定：选择第一个收到包的 NIC, 其它 RX socket 全部禁用
-  if (gOknUdpRxActiveSocket == NULL) {
-    gOknUdpRxActiveSocket   = Socket;
-    gOknUdpRxActiveSbHandle = Socket->ServiceBindingHandle;
-
-    for (UINTN i = 0; i < gOknUdpRxSocketCount; i++) {
-      if (gOknUdpRxSockets[i] != NULL && gOknUdpRxSockets[i] != Socket) {
-        DisableUdpRxSocket(gOknUdpRxSockets[i]);
-      }
-    }
-  }
-
-  // 5) 非选中 NIC 上来的包直接丢弃（但要回收 RxData）
-  if (Socket != gOknUdpRxActiveSocket) {
-    gBS->SignalEvent(RxData->RecycleSignal);
-    Socket->TokenReceive.Packet.RxData = NULL;
-    return;
-  }
-
-  // 6) 懒创建 TX socket：只创建一次, 绑定到选中的 SB handle
-  //    注意：NotifyTransmit 改为 Udp4TxFreeHandler, 用于释放本次发送的内存
-  if (gOknUdpSocketTransmit == NULL && gOknUdpRxActiveSbHandle != NULL) {
-    EFI_UDP4_CONFIG_DATA TxCfg = {
-        TRUE,            // AcceptBroadcast
-        FALSE,           // AcceptPromiscuous
-        FALSE,           // AcceptAnyPort
-        TRUE,            // AllowDuplicatePort
-        0,               // TypeOfService
-        16,              // TimeToLive
-        TRUE,            // DoNotFragment
-        0,               // ReceiveTimeout
-        0,               // TransmitTimeout
-        TRUE,            // UseDefaultAddress
-        {{0, 0, 0, 0}},  // StationAddress
-        {{0, 0, 0, 0}},  // SubnetMask
-        5566,            // StationPort
-        {{0, 0, 0, 0}},  // RemoteAddress (unused when using UdpSessionData)
-        0,               // RemotePort    (unused when using UdpSessionData)
-    };
-
-    EFI_STATUS TxStatus;
-
-    TxStatus = CreateUdp4SocketByServiceBindingHandle(
-        gOknUdpRxActiveSbHandle,
-        &TxCfg,
-        (EFI_EVENT_NOTIFY)Udp4NullHandler,    // Tx socket 不需要 Receive 回调
-        (EFI_EVENT_NOTIFY)Udp4TxFreeHandler,  // TX 完成释放资源: Udp4TxFreeHandler
-        &gOknUdpSocketTransmit);
-
-    if (EFI_ERROR(TxStatus)) {
-      Print(L"[UDP] Create TX socket failed: %r\n", TxStatus);
-      gOknUdpSocketTransmit = NULL;
-    }
-    else {
-      // 初始化 TX 内存追踪字段（需要你在 UDP4_SOCKET 结构体中加入这些字段）
-      gOknUdpSocketTransmit->TxPayload    = NULL;
-      gOknUdpSocketTransmit->TxSession    = NULL;
-      gOknUdpSocketTransmit->TxInProgress = FALSE;
-    }
-  }
-
-  if (gOknUdpSocketTransmit == NULL) {
-    gBS->SignalEvent(RxData->RecycleSignal);
-    Socket->TokenReceive.Packet.RxData = NULL;
-    Socket->Udp4->Receive(Socket->Udp4, &Socket->TokenReceive);
-    return;
-  }
-
-  // 7) 若上一次发送还未完成（Token 仍挂起）, 为避免覆盖 Token/内存, 直接丢弃本次回复
-  if (gOknUdpSocketTransmit->TxInProgress) {
-    gBS->SignalEvent(RxData->RecycleSignal);
-    Socket->TokenReceive.Packet.RxData = NULL;
-    Socket->Udp4->Receive(Socket->Udp4, &Socket->TokenReceive);
-    return;
-  }
-
-  // 8) 解析 JSON
-  cJSON *Tree = cJSON_ParseWithLength((CONST CHAR8 *)RxData->FragmentTable[0].FragmentBuffer,
-                                      RxData->FragmentTable[0].FragmentLength);
-
-  if (Tree != NULL) {
-    // 9) 设置 JsonHandler 上下文：确保 areyouok 填的是“当前 NIC”的 MAC/IP
-    gOknJsonCtxSocket = Socket;
-    JsonHandler(Tree);
-    gOknJsonCtxSocket = NULL;
-
-    // 10) 生成响应 JSON（cJSON_PrintUnformatted 返回需要 cJSON_free 的内存）
-    CHAR8 *JsonStr = cJSON_PrintUnformatted(Tree);
-    if (JsonStr != NULL) {
-      UINT32 JsonStrLen = (UINT32)AsciiStrLen(JsonStr);
-
-      // 关键：Transmit 是异步的, 不能直接把 JsonStr 指针塞给 TxData 再立刻释放
-      // 所以这里复制一份到 Pool, TX 完成回调里释放
-      VOID *Payload = AllocateCopyPool(JsonStrLen, JsonStr);
-      cJSON_free(JsonStr);
-
-      if (Payload != NULL && JsonStrLen > 0) {
-        EFI_UDP4_SESSION_DATA *Sess = AllocateZeroPool(sizeof(EFI_UDP4_SESSION_DATA));
-        if (Sess != NULL) {
-          Sess->DestinationAddress = RxData->UdpSession.SourceAddress;
-          Sess->DestinationPort    = RxData->UdpSession.SourcePort;
-          Sess->SourcePort         = 5566;
-          // 可选：如果你在 Socket 里保存了 DHCP IP, 可把源地址也填上
-          // Sess->SourceAddress = Socket->NicIp;
-
-          EFI_UDP4_TRANSMIT_DATA *TxData = gOknUdpSocketTransmit->TokenTransmit.Packet.TxData;
-          ZeroMem(TxData, sizeof(EFI_UDP4_TRANSMIT_DATA));
-          TxData->UdpSessionData                  = Sess;
-          TxData->DataLength                      = JsonStrLen;
-          TxData->FragmentCount                   = 1;
-          TxData->FragmentTable[0].FragmentLength = JsonStrLen;
-          TxData->FragmentTable[0].FragmentBuffer = Payload;
-
-          // 记录待释放资源, TX 完成回调释放
-          gOknUdpSocketTransmit->TxPayload    = Payload;
-          gOknUdpSocketTransmit->TxSession    = Sess;
-          gOknUdpSocketTransmit->TxInProgress = TRUE;
-
-          Status =
-              gOknUdpSocketTransmit->Udp4->Transmit(gOknUdpSocketTransmit->Udp4, &gOknUdpSocketTransmit->TokenTransmit);
-          if (EFI_ERROR(Status)) {
-            // 发送失败：立即释放并复位
-            gOknUdpSocketTransmit->TxInProgress = FALSE;
-            if (gOknUdpSocketTransmit->TxPayload) {
-              FreePool(gOknUdpSocketTransmit->TxPayload);
-              gOknUdpSocketTransmit->TxPayload = NULL;
-            }
-            if (gOknUdpSocketTransmit->TxSession) {
-              FreePool(gOknUdpSocketTransmit->TxSession);
-              gOknUdpSocketTransmit->TxSession = NULL;
-            }
-          }
-        }
-        else {
-          FreePool(Payload);
-        }
-      }
-      else {
-        if (Payload)
-          FreePool(Payload);
-      }
-    }
-
-    cJSON_Delete(Tree);
-  }
-
-  // 11) 回收 RxData 并重新投递 Receive
-  gBS->SignalEvent(RxData->RecycleSignal);
-  Socket->TokenReceive.Packet.RxData = NULL;
-  Socket->Udp4->Receive(Socket->Udp4, &Socket->TokenReceive);
-  return;
-}
-
-VOID EFIAPI Udp4NullHandler(IN EFI_EVENT Event, IN VOID *Context) { }
-
 #if 1  // STATIC函数实现区域 ON
-STATIC UINTN OknCmdTableCount(VOID)
+STATIC UINTN OknMT_CmdTableCount(VOID)
 {
   return sizeof(gOknCmdTable) / sizeof(gOknCmdTable[0]);
 }
@@ -306,7 +115,7 @@ STATIC EFI_STATUS OknMT_DispatchJsonCmd(IN OKN_MEMORY_TEST_PROTOCOL *Proto,
 
   cJSON *Cmd = cJSON_GetObjectItemCaseSensitive(Tree, "CMD");
   if (Cmd == NULL || Cmd->type != cJSON_String || Cmd->valuestring == NULL) {
-    // 这里你可以用 JsonSetBool/JsonSetString（如果你已有封装）
+    // 这里你可以用 OknMT_JsonSetBool/JsonSetString（如果你已有封装）
     cJSON_AddBoolToObject(Tree, "SUCCESS", FALSE);
     cJSON_AddStringToObject(Tree, "ERROR", "Missing/invalid CMD (string)");
     return EFI_INVALID_PARAMETER;
@@ -320,7 +129,7 @@ STATIC EFI_STATUS OknMT_DispatchJsonCmd(IN OKN_MEMORY_TEST_PROTOCOL *Proto,
 
   CONST CHAR8 *CmdStr = (CONST CHAR8 *)Cmd->valuestring;
 
-  for (UINTN i = 0; i < OknCmdTableCount(); i++) {
+  for (UINTN i = 0; i < OknMT_CmdTableCount(); i++) {
     if (AsciiStrCmp(CmdStr, gOknCmdTable[i].CmdName) == 0) {
       EFI_STATUS Status = gOknCmdTable[i].Handler(&Ctx);
 
@@ -346,9 +155,9 @@ STATIC EFI_STATUS OknMT_DispatchJsonCmd(IN OKN_MEMORY_TEST_PROTOCOL *Proto,
 // 从 SMBIOS Optional String Area(以 '\0\0' 结束)中, 按 1-based Index 获取字符串指针.
 // Index == 0: SMBIOS 语义为 "Not Specified", 返回 EFI_NOT_FOUND(更合理)
 // 成功: *OutStr 指向原始记录内存(不拷贝)
-STATIC EFI_STATUS OKnSmbiosGetOptionalStringByIndex(IN CONST CHAR8   *OptionalStrStart,
-                                                    IN UINT8          Index,
-                                                    OUT CONST CHAR8 **OutStr)
+STATIC EFI_STATUS OknMT_SmbiosGetOptionalStringByIndex(IN CONST CHAR8   *OptionalStrStart,
+                                                       IN UINT8          Index,
+                                                       OUT CONST CHAR8 **OutStr)
 {
   if (OptionalStrStart == NULL || OutStr == NULL) {
     return EFI_INVALID_PARAMETER;
@@ -485,9 +294,9 @@ STATIC EFI_STATUS Cmd_MT86Status(OUT cJSON *pJsTree)
   cJSON_AddNumberToObject(pJsTree, "UnknownSlotError", MtSupportGetNumUnknownSlotErrors());
 
   cJSON              *ErrorInfo = cJSON_AddArrayToObject(pJsTree, "ERRORINFO");
-  DIMM_ADDRESS_DETAIL Item;
+  OKN_DIMM_ADDRESS_DETAIL Item;
   for (UINT8 i = 0; i < 4; i++) {
-    ZeroMem(&Item, sizeof(DIMM_ADDRESS_DETAIL));
+    ZeroMem(&Item, sizeof(OKN_DIMM_ADDRESS_DETAIL));
 
     Status = OknMT_DequeueErrorCopy(&gOknDimmErrorQueue, &Item);
     if (EFI_NOT_FOUND == Status) {
@@ -535,7 +344,7 @@ STATIC VOID Cmd_MT86Abort(VOID)
 {
   MtSupportAbortTesting();
   gOknTestStart  = FALSE;  // fix duplicate test
-  gOknTestStatus = 2;
+  gOknTestStatus = OKN_TST_Aborted;
 
   return;
 }
@@ -571,7 +380,7 @@ STATIC EFI_STATUS Cmd_MT86Start(IN cJSON *pJsTree)
 
   gOknMT86TestID = (INT8)(Id->valueu64 - 47);  // ?
   gOknTestStart  = TRUE;                       // ?
-  gOknTestStatus = 1;                          // ?
+  gOknTestStatus = OKN_TST_Testing;                          // ?
 
   return EFI_SUCCESS;
 }
@@ -667,14 +476,14 @@ STATIC EFI_STATUS Cmd_HwInfo(IN OKN_MEMORY_TEST_PROTOCOL *pProto, OUT cJSON *pJs
           break;
         }
         CHAR8 *pCpuID, *pCpuVerInfo;
-        Status =
-            OKnSmbiosGetOptionalStringByIndex((CHAR8 *)((UINT8 *)pSmbiosType4Record + pSmbiosType4Record->Hdr.Length),
-                                              pSmbiosType4Record->Socket,
-                                              &pCpuID);
-        Status =
-            OKnSmbiosGetOptionalStringByIndex((CHAR8 *)((UINT8 *)pSmbiosType4Record + pSmbiosType4Record->Hdr.Length),
-                                              pSmbiosType4Record->ProcessorVersion,
-                                              &pCpuVerInfo);
+        Status = OknMT_SmbiosGetOptionalStringByIndex(
+            (CHAR8 *)((UINT8 *)pSmbiosType4Record + pSmbiosType4Record->Hdr.Length),
+            pSmbiosType4Record->Socket,
+            &pCpuID);
+        Status = OknMT_SmbiosGetOptionalStringByIndex(
+            (CHAR8 *)((UINT8 *)pSmbiosType4Record + pSmbiosType4Record->Hdr.Length),
+            pSmbiosType4Record->ProcessorVersion,
+            &pCpuVerInfo);
         cJSON_AddStringToObject(pJsTree, pCpuID, pCpuVerInfo);
       }
     }
@@ -822,28 +631,30 @@ STATIC EFI_STATUS Cmd_ResetSystem(IN OUT cJSON *pTree, OUT EFI_RESET_TYPE *pRese
     return EFI_INVALID_PARAMETER;
   }
 
-  Status = JsonGetU32FromObject(pTree, "TYPE", &TypeU32);
+  Status = OknMT_JsonGetU32FromObject(pTree, "TYPE", &TypeU32);
   if (EFI_ERROR(Status)) {
-    JsonSetBool(pTree, "SUCCESS", FALSE);
-    JsonSetString(pTree, "ERROR", "Missing/invalid TYPE (number 0..2)");
+    OknMT_JsonSetBool(pTree, "SUCCESS", FALSE);
+    OknMT_JsonSetString(pTree, "ERROR", "Missing/invalid TYPE (number 0..2)");
     return Status;
   }
 
   // 只支持 0/1/2，不支持 3（PlatformSpecific）,因为那需要 ResetData GUID
   if (TypeU32 > EfiResetShutdown) {  // EfiResetShutdown == 2
-    JsonSetBool(pTree, "SUCCESS", FALSE);
+    OknMT_JsonSetBool(pTree, "SUCCESS", FALSE);
     if (EfiResetPlatformSpecific == TypeU32) {
-      JsonSetString(pTree, "ERROR", "TYPE=3 (PlatformSpecific) not supported (GUID ResetData disabled by design)");
+      OknMT_JsonSetString(pTree,
+                          "ERROR",
+                          "TYPE=3 (PlatformSpecific) not supported (GUID ResetData disabled by design)");
       return EFI_UNSUPPORTED;
     }
-    JsonSetString(pTree, "ERROR", "TYPE out of range (0=cold,1=warm,2=shutdown)");
+    OknMT_JsonSetString(pTree, "ERROR", "TYPE out of range (0=cold,1=warm,2=shutdown)");
     return EFI_INVALID_PARAMETER;
   }
 
   *pResetType = (EFI_RESET_TYPE)TypeU32;
 
-  JsonSetNumber(pTree, "TYPE", (INTN)TypeU32);  // 规范化回显
-  JsonSetString(pTree, "ERROR", "");
+  OknMT_JsonSetNumber(pTree, "TYPE", (INTN)TypeU32);  // 规范化回显
+  OknMT_JsonSetString(pTree, "ERROR", "");
 
   return EFI_SUCCESS;
 }

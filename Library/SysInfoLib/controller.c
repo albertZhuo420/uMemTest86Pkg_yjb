@@ -20041,7 +20041,7 @@ static void poll_emeraldrapids_sp(struct ecc_info *ctrl)
                 BankAdd = BkFd.Bits.Ba;
                 AsciiPrint("add:%llx;soc:%d;imc:%d;ch:%d;bg:%d;bk:%d;row:0x%x;col:0x%x\n",
                 mcaddr, CPUPkg, imc, ch, BGAdd, BankAdd, row, (col << 2));
-                DIMM_ADDRESS_DETAIL Detail = {0};
+                OKN_DIMM_ADDRESS_DETAIL Detail = {0};
                 if (SysToDimm((UINTN)(mcaddr & addrmask), &Detail) == 0) {
                     if (uncorrected_error) {
                         Detail.Type = DIMM_ERROR_TYPE_ECC_UNCORRECTED;

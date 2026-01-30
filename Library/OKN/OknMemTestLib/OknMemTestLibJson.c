@@ -3,9 +3,9 @@
  *
  */
 
-#include <Library/OKN/OknMemTestLib/OknMemTestLib.h>
+#include <Library/OKN/OknMemTestLib.h>
 
-EFI_STATUS JsonGetU64(IN CONST cJSON *Item, OUT UINT64 *Val)
+EFI_STATUS OknMT_JsonGetU64(IN CONST cJSON *Item, OUT UINT64 *Val)
 {
   if (NULL == Item || NULL == Val) {
     return EFI_INVALID_PARAMETER;
@@ -30,7 +30,7 @@ EFI_STATUS JsonGetU64(IN CONST cJSON *Item, OUT UINT64 *Val)
   return EFI_INVALID_PARAMETER;
 }
 
-EFI_STATUS JsonGetU32FromObject(IN CONST cJSON *Obj, IN CONST CHAR8 *Key, OUT UINT32 *Val)
+EFI_STATUS OknMT_JsonGetU32FromObject(IN CONST cJSON *Obj, IN CONST CHAR8 *Key, OUT UINT32 *Val)
 {
   cJSON *It;
   UINT64 Tmp;
@@ -57,7 +57,7 @@ EFI_STATUS JsonGetU32FromObject(IN CONST cJSON *Obj, IN CONST CHAR8 *Key, OUT UI
   return EFI_SUCCESS;
 }
 
-EFI_STATUS JsonGetU16FromObject(IN CONST cJSON *Obj, IN CONST CHAR8 *Key, OUT UINT16 *Val)
+EFI_STATUS OknMT_JsonGetU16FromObject(IN CONST cJSON *Obj, IN CONST CHAR8 *Key, OUT UINT16 *Val)
 {
   cJSON *It;
   UINT64 Tmp;
@@ -111,7 +111,7 @@ EFI_STATUS JsonGetU8FromObject(IN CONST cJSON *Obj, IN CONST CHAR8 *Key, OUT UIN
   return EFI_SUCCESS;
 }
 
-EFI_STATUS JsonGetU8FromArray(IN CONST cJSON *Arr, IN INTN Index, OUT UINT8 *Val)
+EFI_STATUS OknMT_JsonGetU8FromArray(IN CONST cJSON *Arr, IN INTN Index, OUT UINT8 *Val)
 {
   cJSON *It;
   UINT64 Tmp;
@@ -138,7 +138,7 @@ EFI_STATUS JsonGetU8FromArray(IN CONST cJSON *Arr, IN INTN Index, OUT UINT8 *Val
   return EFI_SUCCESS;
 }
 
-EFI_STATUS JsonGetU16FromArray(IN CONST cJSON *Arr, IN INTN Index, OUT UINT16 *Val)
+EFI_STATUS OknMT_JsonGetU16FromArray(IN CONST cJSON *Arr, IN INTN Index, OUT UINT16 *Val)
 {
   cJSON *It;
   UINT64 Tmp;
@@ -165,7 +165,7 @@ EFI_STATUS JsonGetU16FromArray(IN CONST cJSON *Arr, IN INTN Index, OUT UINT16 *V
   return EFI_SUCCESS;
 }
 
-EFI_STATUS JsonGetU32FromArray(IN CONST cJSON *Arr, IN INTN Index, OUT UINT32 *Val)
+EFI_STATUS OknMT_JsonGetU32FromArray(IN CONST cJSON *Arr, IN INTN Index, OUT UINT32 *Val)
 {
   cJSON *It;
   UINT64 Tmp;
@@ -194,7 +194,7 @@ EFI_STATUS JsonGetU32FromArray(IN CONST cJSON *Arr, IN INTN Index, OUT UINT32 *V
 
 // ---- JSON "add or replace" helpers (avoid duplicate keys) ----
 
-EFI_STATUS JsonSetBool(IN cJSON *Obj, IN CONST CHAR8 *Key, IN BOOLEAN Val)
+EFI_STATUS OknMT_JsonSetBool(IN cJSON *Obj, IN CONST CHAR8 *Key, IN BOOLEAN Val)
 {
   cJSON     *Old;
   cJSON     *NewItem;
@@ -228,7 +228,7 @@ EFI_STATUS JsonSetBool(IN cJSON *Obj, IN CONST CHAR8 *Key, IN BOOLEAN Val)
   return EFI_SUCCESS;
 }
 
-EFI_STATUS JsonSetString(IN cJSON *Obj, IN CONST CHAR8 *Key, IN CONST CHAR8 *Val)
+EFI_STATUS OknMT_JsonSetString(IN cJSON *Obj, IN CONST CHAR8 *Key, IN CONST CHAR8 *Val)
 {
   cJSON     *Old;
   cJSON     *NewItem;
@@ -271,7 +271,7 @@ EFI_STATUS JsonSetString(IN cJSON *Obj, IN CONST CHAR8 *Key, IN CONST CHAR8 *Val
   return EFI_SUCCESS;
 }
 
-EFI_STATUS JsonSetNumber(IN cJSON *Obj, IN CONST CHAR8 *Key, IN INTN Val)
+EFI_STATUS OknMT_JsonSetNumber(IN cJSON *Obj, IN CONST CHAR8 *Key, IN INTN Val)
 {
   cJSON     *Old;
   cJSON     *NewItem;
