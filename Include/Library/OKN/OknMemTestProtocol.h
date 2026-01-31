@@ -1,8 +1,11 @@
 #ifndef _OKN_MEM_TEST_PROTOCOL_H_
 #define _OKN_MEM_TEST_PROTOCOL_H_
 
-#include <Guid/OknMemTestProtocolGuid.h>
 #include <Uefi.h>
+
+#define OKN_MEMORY_TEST_PROTOCOL_GUID {0x03793b65, 0x5388, 0x479d, {0xa4, 0x4d, 0xec, 0xa5, 0xf3, 0x00, 0x92, 0x2d}}
+
+extern EFI_GUID gOknMemTestProtocolGuid;
 
 typedef enum {
   DimmRankMapOutUnknown           = 0,
@@ -101,18 +104,22 @@ typedef enum {
 } OKN_DIMM_ERROR_TYPE;
 
 typedef struct {
-  UINT8               SocketId;   // 0..1
-  UINT8               MemCtrlId;  // 0..3
-  UINT8               ChannelId;  // 0..1
-  UINT8               DimmSlot;   // 0..1
-  UINT8               RankId;     // 0..1
-  UINT8               SubChId;    // 0..1 always 0 in DDR4
-  UINT8               BankGroup;  // 0..7
-  UINT8               Bank;       // 0..3
-  UINT32              Row;
-  UINT32              Column;
-  OKN_DIMM_ERROR_TYPE Type;
+  UINT8  SocketId;   // 0..1
+  UINT8  MemCtrlId;  // 0..3
+  UINT8  ChannelId;  // 0..1
+  UINT8  DimmSlot;   // 0..1
+  UINT8  RankId;     // 0..1
+  UINT8  SubChId;    // 0..1 always 0 in DDR4
+  UINT8  BankGroup;  // 0..7
+  UINT8  Bank;       // 0..3
+  UINT32 Row;
+  UINT32 Column;
 } OKN_DIMM_ADDRESS_DETAIL;
+
+typedef struct {
+  OKN_DIMM_ADDRESS_DETAIL AddrDetail;
+  OKN_DIMM_ERROR_TYPE     Type;
+} OKN_DIMM_ADDRESS_DETAIL_PLUS;
 
 #pragma pack()
 

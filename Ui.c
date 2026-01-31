@@ -78,6 +78,8 @@
 
 #include <uMemTest86.h>
 
+#include <Library/OKN/OknMemTestLib.h>
+
 #define LINE_INFO	11							// the y-coordinates of the elapsed time/pass #/error count
 #define COL_MID		30							// the x-coordinates of the divider line
 #define BAR_SIZE	(MaxUIWidth-2-COL_MID-15)	// the width of the progress bar
@@ -98,7 +100,7 @@ STATIC UINTN		mLastPercent;				// last progress %
 STATIC CHAR16		mTestName[64];				// current test name
 STATIC UINT64		mStartAddr;					// current memory range start
 STATIC UINT64		mEndAddr;					// current memory range end
-struct PAT_UI {
+struct {
 	UINT32 CurPattern[4];
 	UINT32 NewPattern[4];
 	UINT8 CurSize;
@@ -706,7 +708,9 @@ MtUiUpdateProgress (
 	  MtUiDrawProgress(); 
   }
   mLastPercent = Percent;
+#ifdef OKN_MT86
   gOknLastPercent = Percent;
+#endif // OKN_MT86
 }
 
 VOID
@@ -1415,7 +1419,11 @@ static void display_init(void)
 	gST->ConOut->ClearScreen(gST->ConOut);
 
 	gST->ConOut->SetAttribute(gST->ConOut, EFI_TEXT_ATTR(EFI_WHITE, EFI_GREEN));
-	Print(L"OKN %s %s", PROGRAM_NAME, PROGRAM_VERSION);
+#ifndef OKN_MT86
+	Print(L"PassMark %s %s", PROGRAM_NAME, PROGRAM_VERSION);
+#else
+	Print(L"OKN MemTest86 %s %s", PROGRAM_NAME, PROGRAM_VERSION);
+#endif 
 
 	//
 	// Retrieve the number of columns and rows in the current console mode

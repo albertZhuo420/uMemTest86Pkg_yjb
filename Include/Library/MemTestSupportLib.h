@@ -61,7 +61,7 @@
 
 #include <uMemTest86.h>
 
-extern CHAR16 g_wszBuffer[BUF_SIZE];
+extern CHAR16 g_wszBuffer[1024];
 
 #define EFI_TEST_FAILED 0x80001000
 

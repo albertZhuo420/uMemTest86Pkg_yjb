@@ -19,7 +19,7 @@ VOID OknMT_InitErrorQueue(DIMM_ERROR_QUEUE *Queue)
   AcquireSpinLock(&Queue->Lock);
 
   for (UINT8 i = 0; i < OKN_MAX_ADDRESS_RECORD_SIZE; i++) {
-    ZeroMem(&Queue->AddrBuffer[i], sizeof(OKN_DIMM_ADDRESS_DETAIL));
+    ZeroMem(&Queue->AddrBuffer[i], sizeof(OKN_DIMM_ADDRESS_DETAIL_PLUS));
   }
   Queue->Head = 0;
   Queue->Tail = 0;
@@ -63,7 +63,7 @@ BOOLEAN OknMT_IsErrorQueueFull(DIMM_ERROR_QUEUE *Queue)
   return Full;
 }
 
-VOID OknMT_EnqueueError(DIMM_ERROR_QUEUE *Queue, OKN_DIMM_ADDRESS_DETAIL *Item)
+VOID OknMT_EnqueueError(DIMM_ERROR_QUEUE *Queue, OKN_DIMM_ADDRESS_DETAIL_PLUS *Item)
 {
   if (NULL == Queue || NULL == Item) {
     return;
@@ -86,7 +86,7 @@ VOID OknMT_EnqueueError(DIMM_ERROR_QUEUE *Queue, OKN_DIMM_ADDRESS_DETAIL *Item)
   return;
 }
 
-EFI_STATUS OknMT_DequeueErrorCopy(IN OUT DIMM_ERROR_QUEUE *Queue, OUT OKN_DIMM_ADDRESS_DETAIL *OutItem)
+EFI_STATUS OknMT_DequeueErrorCopy(IN OUT DIMM_ERROR_QUEUE *Queue, OUT OKN_DIMM_ADDRESS_DETAIL_PLUS *OutItem)
 {
   if (NULL == Queue || NULL == OutItem) {
     return EFI_INVALID_PARAMETER;
@@ -101,7 +101,7 @@ EFI_STATUS OknMT_DequeueErrorCopy(IN OUT DIMM_ERROR_QUEUE *Queue, OUT OKN_DIMM_A
     return EFI_NOT_FOUND;
   }
 
-  CopyMem(OutItem, &Queue->AddrBuffer[Queue->Head], sizeof(OKN_DIMM_ADDRESS_DETAIL));
+  CopyMem(OutItem, &Queue->AddrBuffer[Queue->Head], sizeof(OKN_DIMM_ADDRESS_DETAIL_PLUS));
   Queue->Head = (Queue->Head + 1) % OKN_MAX_ADDRESS_RECORD_SIZE;
 
   ReleaseSpinLock(&Queue->Lock);

@@ -121,7 +121,7 @@
 
 #include "TestResultsStorage.h"
 // #include "font.h"
-// #include "sha2.h"
+#include "sha2.h"
 #include <Tests/AddressWalkingOnes/AddressWalkingOnes.h>
 #include <Tests/AddressOwn/AddressOwn.h>
 #include <Tests/MovingInv/MovingInv.h>
@@ -170,7 +170,6 @@
 #include <Library/OKN/OknMemTestLib.h>
 extern VOID EFIAPI UnlockAllMemRanges(VOID);
 extern VOID EFIAPI LockAllMemRanges(VOID);
-#define OKN_MT86
 // OKN
 
 #define MIN_SCREEN_WIDTH 1024 // Minimum horizontal resolution
@@ -1261,8 +1260,8 @@ VOID InstallSelectedTests();
 // (Not used) For row hammer testing
 VOID InstallRowHammerTests();
 
-// static EFI_GUID mFontPackageGuid =
-//     {0x78941450, 0x90ab, 0x4fb1, {0xb7, 0x5f, 0x58, 0x92, 0x14, 0xe2, 0x4a, 0xc}};
+static EFI_GUID mFontPackageGuid =
+    {0x78941450, 0x90ab, 0x4fb1, {0xb7, 0x5f, 0x58, 0x92, 0x14, 0xe2, 0x4a, 0xc}};
 
 static EFI_GUID mLocalizationPackageGuid =
     {0xc95520c1, 0x3c5d, 0x4077, {0xaf, 0xe9, 0x1, 0x88, 0x98, 0x1f, 0x30, 0xb}};
@@ -1320,7 +1319,7 @@ typedef struct
     UINT16 MinorRev;
     UINT16 NumberOfNarrowGlyphs;
     UINT16 NumberOfWideGlyphs;
-    UINT8 Hash[32];
+    UINT8 Hash[SHA256_DIGEST_LENGTH];
 } FontHeader;
 
 #define FONT_SIGNATURE "PASS"
@@ -2866,51 +2865,54 @@ UefiMain(
     // Connect to managment console
     MtSupportPMPConnect();
 
-    EFI_UDP4_CONFIG_DATA RxConfigData = {
-                          TRUE,   // AcceptBroadcast
-                          FALSE,  // AcceptPromiscuous
-                          FALSE,  // AcceptAnyPort
-                          TRUE,   // AllowDuplicatePort
-                          0,      // TypeOfService
-                          16,     // TimeToLive
-                          TRUE,   // DoNotFragment
-                          0,      // ReceiveTimeout
-                          0,      // TransmitTimeout
-                          TRUE,   // UseDefaultAddress
-                          {{0, 0, 0, 0}},  // StationAddress
-                          {{0, 0, 0, 0}},  // SubnetMask
-                          OKN_STATION_UDP_PORT,            // StationPort
-                          {{0, 0, 0, 0}},  // RemoteAddress
-                          0,               // RemotePort
+#ifdef OKN_MT86
+    EFI_UDP4_CONFIG_DATA OknRxConfigData = {
+                          TRUE,                 // AcceptBroadcast
+                          FALSE,                // AcceptPromiscuous
+                          FALSE,                // AcceptAnyPort
+                          TRUE,                 // AllowDuplicatePort
+                          0,                    // TypeOfService
+                          16,                   // TimeToLive
+                          TRUE,                 // DoNotFragment
+                          0,                    // ReceiveTimeout
+                          0,                    // TransmitTimeout
+                          TRUE,                 // UseDefaultAddress
+                          {{0, 0, 0, 0}},       // StationAddress
+                          {{0, 0, 0, 0}},       // SubnetMask
+                          OKN_STATION_UDP_PORT, // StationPort
+                          {{0, 0, 0, 0}},       // RemoteAddress
+                          0,                    // RemotePort
      };
  
     // Listen on all NICs. The first NIC that receives a packet becomes the bound interface.
-	OknDumpNetProtoCounts();
+    OknDumpNetProtoCounts();
     gBS->Stall(4000 * 1000); // 1s, 防止一闪而过
     OknConnectAllSnpControllers();
     OknDumpNetProtoCounts();
     gBS->Stall(4000 * 1000); // 1s
 
-    Status = OknStartUdp4ReceiveOnAllNics(&RxConfigData);
-	Print(L"[UDP] OknStartUdp4ReceiveOnAllNics: %r, RxSockCnt=%u\n", Status, gOknUdpRxSocketCount);
+    Status = OknStartUdp4ReceiveOnAllNics(&OknRxConfigData);
+    Print(L"[UDP] OknStartUdp4ReceiveOnAllNics: %r, RxSockCnt=%u\n", Status, gOknUdpRxSocketCount);
     gBS->Stall(4 * 1000 * 1000);
     if (false == EFI_ERROR(Status)) {
-		gOKnSkipWaiting = FALSE;
-		MtSupportDebugWriteLine("Waiting for UDP NIC binding (first packet)...");
-		Print(L"Waiting for UDP NIC binding (first packet)...\n");
-		(VOID)OknWaitForUdpNicBind(0);
+      gOKnSkipWaiting = FALSE;
+      MtSupportDebugWriteLine("Waiting for UDP NIC binding (first packet)...");
+      Print(L"Waiting for UDP NIC binding (first packet)...\n");
+      (VOID)OknWaitForUdpNicBind(0);
     } 
-	else {
-		// 保持原始语义：UDP 不可用才 skip waiting
-		// Preserve original semantics: only skip waiting when UDP init fails.
-		gOKnSkipWaiting = TRUE;
+    else {
+      // 保持原始语义：UDP 不可用才 skip waiting
+      // Preserve original semantics: only skip waiting when UDP init fails.
+      gOKnSkipWaiting = TRUE;
     }
 
     // TX socket will be created lazily in OknUdp4ReceiveHandler() after NIC binding.
     gOknUdpSocketTransmit = NULL;
 
-    if (gOKnSkipWaiting)
-        gAutoMode = TRUE;
+    if (gOKnSkipWaiting) {
+      gAutoMode = TRUE;
+    }
+#endif // OKN_MT86		
 
     Print(GetStringById(STRING_TOKEN(STR_INIT_DISPLAY), TempBuf, sizeof(TempBuf)));
 
@@ -3056,8 +3058,12 @@ UefiMain(
         if (Select == ID_BUTTON_EXIT)
             goto Exit;
     }
+
+#ifdef OKN_MT86
     MtRangesConstructor();
     LockAllMemRanges();
+#endif // OKN_MT
+
     do
     {
         EFI_STATUS TestStatus;
@@ -3092,9 +3098,19 @@ UefiMain(
             L"███████ ██████  ██   ██     █████   ███████ ██ ██     ",
             L"     ██ ██      ██   ██     ██      ██   ██ ██ ██     ",
             L"███████ ██      ██████      ██      ██   ██ ██ ███████"};
-		// clang-format on
-        gConsoleOnly = TRUE;
-        if (TRUE)
+        // clang-format on
+#ifdef OKN_MT86
+        gConsoleOnly = TRUE; // 直接把图形 UI 分支废掉, 保证永远走: Cmd = MtSupportTestConfig();
+        if (TRUE) // 无论 Select 当前是什么(哪怕已经是 START), 都强制进入 MtSupportTestConfig()
+#else
+        /**
+         * 只有当当前状态不是"准备开始测试"(Select != ID_BUTTON_START)时, 才进入配置/菜单界面;
+         * 如果已经是 ID_BUTTON_START, 说明外层状态机已经决定要开始跑了, 那就跳过配置菜单, 直接
+         * 进入后续 START 分支(跑测试).
+         * 也就是: "配置界面"和"开始测试"是互斥阶段
+         */
+        if (Select != ID_BUTTON_START)  // Show configuration menu
+#endif // OKN_MT86
         {
             UINT16 Cmd;
 

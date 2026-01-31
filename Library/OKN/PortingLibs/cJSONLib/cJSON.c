@@ -50,7 +50,7 @@
 
 // int _fltused  = 1;
 
-#include <Library/cJSONLib.h>
+#include <Library/OKN/PortingLibs/cJSONLib.h>
 
 /* define our own boolean type */
 #ifdef true

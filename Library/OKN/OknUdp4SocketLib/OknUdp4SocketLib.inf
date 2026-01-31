@@ -23,6 +23,7 @@
   UefiRuntimeServicesTableLib
   UefiBootServicesTableLib
   PrintLib
+  cJSONLib
 
 [Protocols]
   gEfiUdp4ServiceBindingProtocolGuid

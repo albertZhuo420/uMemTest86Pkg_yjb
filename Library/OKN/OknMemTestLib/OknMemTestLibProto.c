@@ -427,7 +427,7 @@ EFI_STATUS OknMT_ReadSpdToJson(IN OKN_MEMORY_TEST_PROTOCOL *pProto, IN OUT cJSON
 
 EFI_STATUS OknMT_TranslatedAddressFromSystemToDimm(IN OKN_MEMORY_TEST_PROTOCOL *pProto,
                                                    IN UINTN                     SystemAddress,
-                                                   OUT OKN_DIMM_ADDRESS_DETAIL     *pTranslatedAddress)
+                                                   OUT OKN_DIMM_ADDRESS_DETAIL *pTranslatedAddress)
 {
   EFI_STATUS Status = EFI_SUCCESS;
 
@@ -439,6 +439,7 @@ EFI_STATUS OknMT_TranslatedAddressFromSystemToDimm(IN OKN_MEMORY_TEST_PROTOCOL *
 
   // 2) 调用 AddrSys2Dimm
   OKN_DIMM_ADDRESS_DETAIL TranslatedAddr;
+  ZeroMem(&TranslatedAddr, sizeof(OKN_DIMM_ADDRESS_DETAIL));
   Status = pProto->AddrSys2Dimm(SystemAddress, &TranslatedAddr);
   if (TRUE == EFI_ERROR(Status)) {
     Print(L"[OKN_UEFI_ERR] [%s] AddrSys2Dimm() failed: %r\n", __func__, Status);

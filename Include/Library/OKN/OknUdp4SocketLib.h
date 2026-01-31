@@ -10,21 +10,19 @@
 #include <Library/UefiBootServicesTableLib.h>
 #include <Library/UefiLib.h>
 #include <Library/UefiRuntimeServicesTableLib.h>
+#include <Protocol/DevicePath.h>
+#include <Protocol/Dhcp4.h>
+#include <Protocol/Ip4Config2.h>
 #include <Protocol/ServiceBinding.h>
+#include <Protocol/SimpleNetwork.h>
 #include <Protocol/Udp4.h>
+#include <Protocol/UsbIo.h>
 
 #define MAX_UDP4_FRAGMENT_LENGTH SIZE_2KB
 
 #define MAX_UDP4_RX_SOCKETS 16
 
 #define OKN_STATION_UDP_PORT 9527
-
-extern UDP4_SOCKET *gOknUdpSocketTransmit = NULL;
-extern UDP4_SOCKET *gOknUdpRxSockets[MAX_UDP4_RX_SOCKETS];
-extern UINTN        gOknUdpRxSocketCount    = 0;
-extern UDP4_SOCKET *gOknUdpRxActiveSocket   = NULL;
-extern EFI_HANDLE   gOknUdpRxActiveSbHandle = NULL;
-extern UDP4_SOCKET *gOknJsonCtxSocket       = NULL;
 
 typedef struct {
   // 归属关系：这个 UDP4 child 属于哪个 UDP4 ServiceBinding(也就是哪张 NIC)
@@ -51,7 +49,15 @@ typedef struct {
   BOOLEAN                TxInProgress;
 } UDP4_SOCKET;
 
-EFI_STATUS OknUdp4SocketLibConstructor(VOID);
+extern UDP4_SOCKET *gOknUdpSocketTransmit;
+extern UDP4_SOCKET *gOknUdpRxSockets[MAX_UDP4_RX_SOCKETS];
+extern UINTN        gOknUdpRxSocketCount;
+extern UDP4_SOCKET *gOknUdpRxActiveSocket;
+extern EFI_HANDLE   gOknUdpRxActiveSbHandle;
+extern UDP4_SOCKET *gOknJsonCtxSocket;
+
+RETURN_STATUS EFIAPI OknUdp4SocketLibConstructor(VOID);
+
 EFI_STATUS OknCreateUdp4SocketByServiceBindingHandle(IN EFI_HANDLE            Udp4ServiceBindingHandle,
                                                      IN EFI_UDP4_CONFIG_DATA *ConfigData,
                                                      IN EFI_EVENT_NOTIFY      NotifyReceive,

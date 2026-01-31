@@ -68,16 +68,14 @@
   HiiLib|MdeModulePkg/Library/UefiHiiLib/UefiHiiLib.inf
   UefiHiiServicesLib|MdeModulePkg/Library/UefiHiiServicesLib/UefiHiiServicesLib.inf
   YAMLLib|uMemTest86Pkg/Library/YAMLLib/YAMLLib.inf
-  RcDebugLib|CpRcPkg/Library/BaseRcDebugLibNull/BaseRcDebugLibNull.inf
   
-  # OknPortingLibs
-  cJSONLib|uMemTest86Pkg/Library/OknPortingLibs/cJSONLib/cJSON.inf
-  Udp4SocketLib|uMemTest86Pkg/Library/OknPortingLibs/Udp4SocketLib/Udp4SocketLib.inf
-  #Crypt
-  RngLib|MdePkg/Library/BaseRngLib/BaseRngLib.inf
-  OpensslLib|CryptoPkg/Library/OpensslLib/OpensslLib.inf
-  IntrinsicLib|CryptoPkg/Library/IntrinsicLib/IntrinsicLib.inf
-  BaseCryptLib|CryptoPkg/Library/BaseCryptLib/BaseCryptLib.inf
+  # OKN 添加 ON
+  cJSONLib|uMemTest86Pkg/Library/OKN/PortingLibs/cJSONLib/cJSON.inf
+  OknUdp4SocketLib|uMemTest86Pkg/Library/OKN/OknUdp4SocketLib/OknUdp4SocketLib.inf
+  OknDdr4SpdLib|uMemTest86Pkg/Library/OKN/OknDdr4SpdLib/OknDdr4SpdLib.inf
+  OknMemTestLib|uMemTest86Pkg/Library/OKN/OknMemTestLib/OknMemTestLib.inf
+  OknMemTestProtocol|uMemTest86Pkg/Library/OKN/OknMemTestProtocol/OknMemTestProtocol.inf
+  # OKN 添加 OFF
 
 [LibraryClasses.X64, LibraryClasses.IA32]
   MtrrLib|UefiCpuPkg/Library/MtrrLib/MtrrLib.inf

@@ -1,12 +1,12 @@
-#ifndef _OKN_DDR4_SPD_PARSER_LIB_H_
-#define _OKN_DDR4_SPD_PARSER_LIB_H_
-
 /**
  * @file
  *  DDR4 SPD 解析库头文件
  *
  *  SPDX-License-Identifier: BSD-2-Clause-Patent
  */
+
+#ifndef _OKN_DDR4_SPD_PARSER_LIB_H_
+#define _OKN_DDR4_SPD_PARSER_LIB_H_
 
 #include <Uefi.h>  // EFI_STATUS, UINT8/UINT16/UINTN, BOOLEAN, EFI_SUCCESS...
 

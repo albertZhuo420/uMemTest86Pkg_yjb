@@ -1,4 +1,4 @@
-#include <Library/OKN/OknDdr4SpdLib/OknDdr4SpdLib.h>
+#include <Library/OKN/OknDdr4SpdLib.h>
 
 STATIC EFI_STATUS OknDdr4SpdReadByte(IN CONST UINT8 *Spd, IN UINTN SpdLen, IN UINTN Offset, OUT UINT8 *Value)
 {
@@ -87,7 +87,7 @@ EFI_STATUS EFIAPI OknDdr4SpdGetSdramDeviceWidthBits(IN CONST UINT8 *Spd, IN UINT
   UINT8      B, Code;
   EFI_STATUS Status;
 
-  if (DeviceWidthBits == NULL) {
+  if (NULL == DeviceWidthBits) {
     return EFI_INVALID_PARAMETER;
   }
   Status = OknDdr4SpdReadByte(Spd, SpdLen, DDR4_SPD_BYTE_MODULE_ORGANIZATION, &B);
@@ -620,7 +620,7 @@ EFI_STATUS EFIAPI OknDdr4SpdGetLogicalRanksPerDimm_SymmetricOnly(IN CONST UINT8 
  *
  * SPD 字段来源(协议位置):
  *   - TotalPackages 依赖:
- *       Byte12 (Table 28) + Byte13 (Table 32)(见 Ddr4SpdEstimateTotalPackages)
+ *       Byte12 (Table 28) + Byte13 (Table 32)(见 OknDdr4SpdEstimateTotalPackages)
  *   - DieCount / 3DS 依赖:
  *       Byte6 (0x006) Primary SDRAM Package Type, Table 20
  *   - RankMix 依赖:
@@ -664,7 +664,7 @@ EFI_STATUS EFIAPI OknDdr4SpdEstimateTotalDies_3dsSymmetricOnly(IN CONST UINT8 *S
     return EFI_UNSUPPORTED; /* 非 3DS: 这个推导没意义, 直接报错 */
   }
 
-  Status = Ddr4SpdEstimateTotalPackages(Spd, SpdLen, IncludeExtension, &TotalPkg);
+  Status = OknDdr4SpdEstimateTotalPackages(Spd, SpdLen, IncludeExtension, &TotalPkg);
   if (EFI_ERROR(Status)) {
     return Status;
   }

@@ -60,9 +60,6 @@
 
 #include "SupportLib.h"
 #include <Library/OKN/OknMemTestLib.h>
-#ifndef OKN_MT86
-#define OKN_MT86
-#endif // OKN_MT86
 
 #define INT_MAX 2147483647
 #define INT_MIN (-2147483647 - 1)
@@ -152,7 +149,10 @@ STATIC UINT64 mPrevEccPollTime = 0;
 STATIC UINT64 mPrevTempPollTime = 0;
 static UINT64 mPrevTimingsPollTime = 0;
 STATIC UINT64 mPrevPMPStatusTime = 0;
-STATIC UINT64 mPrevTestFlowPollTime = 0;
+
+#ifdef OKN_MT86
+STATIC UINT64 mOKnPrevTestFlowPollTime = 0;
+#endif // OKN_MT86
 
 // For MTRR cache configuration
 static UINT64 mMtrrValidBitsMask;
@@ -798,7 +798,7 @@ VOID MtSupportTestTick(BOOLEAN UpdateErr)
         }
         mPrevKBPollTime = CurTime;
     }
-#if 0
+#ifndef OKN_MT86
 #ifdef SITE_EDITION
     if (mPrevPMPStatusTime == 0 ||
         ((CurTime - mPrevPMPStatusTime) > (gTFTPStatusSecs * 1000)))
@@ -813,9 +813,8 @@ VOID MtSupportTestTick(BOOLEAN UpdateErr)
         mPrevPMPStatusTime = CurTime;
     }
 #endif
-#endif
-    if (mPrevTestFlowPollTime == 0 || ((CurTime - mPrevTestFlowPollTime) > (500)))
-    {   
+#else // OKN_MT86
+    if (0 == mOKnPrevTestFlowPollTime || ((CurTime - mOKnPrevTestFlowPollTime) > (500))) {   
         if (gOknTestPause) {
             while (1) {
                 gBS->Stall(500000);
@@ -824,8 +823,9 @@ VOID MtSupportTestTick(BOOLEAN UpdateErr)
                 }
             }
         }
-        mPrevTestFlowPollTime = CurTime;
+        mOKnPrevTestFlowPollTime = CurTime;
     }
+#endif // OKN_MT86
 }
 
 VOID MtSupportPollECC()
@@ -1166,6 +1166,9 @@ VOID MtSupportDisplayHwErrRec()
 // LockAllMemRanges
 //
 // Run a generic, single-staged memory test
+#ifndef OKN_MT86
+STATIC
+#endif
 VOID
     EFIAPI
     LockAllMemRanges(
@@ -1332,6 +1335,9 @@ GetNextLockedRange(
     return FALSE;
 }
 
+#ifndef OKN_MT86
+STATIC
+#endif
 VOID
     EFIAPI
     UnlockAllMemRanges(
@@ -3446,7 +3452,9 @@ MtSupportRunAllTests()
     mPrevEccPollTime = 0;
     mPrevTempPollTime = 0;
     mPrevPMPStatusTime = 0;
-    mPrevTestFlowPollTime = 0;
+#ifdef OKN_MT86
+    mOKnPrevTestFlowPollTime = 0;
+#endif// OKN_MT86
 
     SetMem(&erri, sizeof(erri), 0);
     erri.low_addr = (UINTN)-1;
@@ -3542,9 +3550,10 @@ MtSupportRunAllTests()
     rand_init((int)MPSupportGetMaxProcessors());
 
     // Read memory map
-    // MtRangesConstructor();
-
-    // LockAllMemRanges();
+#ifdef OKN_MT86
+    MtRangesConstructor();
+    LockAllMemRanges();
+#endif // OKN_MT86
 
     for (mCurPass = 1; mCurPass <= gNumPasses; mCurPass++)
     {
@@ -3992,11 +4001,13 @@ MtSupportRunAllTests()
     mElapsedTime = efi_time(&CurTime) - efi_time(&mTestStartTime);
 
 Error:
-    // MtUiPrint(gST->ConOut->Mode->Attribute & 0x0F, GetStringById(STRING_TOKEN(STR_MEM_RELEASE), TempBuf, sizeof(TempBuf)));
-    // UnlockAllMemRanges();
+#ifndef OKN_MT86
+    MtUiPrint(gST->ConOut->Mode->Attribute & 0x0F, GetStringById(STRING_TOKEN(STR_MEM_RELEASE), TempBuf, sizeof(TempBuf)));
+    UnlockAllMemRanges();
 
     // Clean up memory map
-    // MtRangesDeconstructor();
+    MtRangesDeconstructor();
+#endif // OKN_MT86
 
     // Cleanup rand lib
     rand_cleanup();
@@ -4143,13 +4154,15 @@ VOID
     __m128i *perrbits128 = (__m128i *)(((UINTN)errbits128 + 0xF) & ~(0xF));
 
 #ifdef OKN_MT86
-    OKN_DIMM_ADDRESS_DETAIL Detail = {0};
-    if (SysToDimm(Address, &Detail) == 0) {
-        Detail.Type = DIMM_ERROR_TYPE_DATA;
-    } else {
-        Detail.Type = DIMM_ERROR_TYPE_UNKOWN;
+    OKN_DIMM_ADDRESS_DETAIL_PLUS OknAddrDetail_DE = {0};
+    ZeroMem(&OknAddrDetail_DE, sizeof(OKN_DIMM_ADDRESS_DETAIL_PLUS));
+    if (EFI_SUCCESS == OknMT_TranslatedAddressFromSystemToDimm(gOknMtProtoPtr, Address, &OknAddrDetail_DE.AddrDetail)) {
+        OknAddrDetail_DE.Type = DIMM_ERROR_TYPE_DATA;
     }
-    EnqueueError(&gOknDimmErrorQueue, &Detail);
+    else {
+        OknAddrDetail_DE.Type = DIMM_ERROR_TYPE_UNKOWN;
+    }
+    OknMT_EnqueueError(&gOknDimmErrorQueue, &OknAddrDetail_DE);
 #endif // OKN_MT86
 
     SetMem(actual128, sizeof(actual128), 0);
@@ -4852,7 +4865,9 @@ MtSupportUpdateErrorDisp()
 
             if (TotalErrCount >= 500)
             {
-                // AsciiFPrint(DEBUG_FILE_HANDLE, "[MEM ERROR] Truncating due to too many errors (Total errs: %d)", TotalErrCount);
+                #ifndef OKN_MT86
+                    AsciiFPrint(DEBUG_FILE_HANDLE, "[MEM ERROR] Truncating due to too many errors (Total errs: %d)", TotalErrCount);
+                #endif // OKN_MT86
                 mTruncateErrLog = TRUE;
             }
         }
@@ -6359,8 +6374,11 @@ efi_time(EFI_TIME *ETime)
         */
         UTime += (ETime->TimeZone * 60);
     }
-
+#ifndef OKN_MT86
+    return UTime;
+#else
     return UTime - 28800;
+#endif // 
 }
 
 // memoryType
@@ -18701,7 +18719,7 @@ MtSupportPMPConnect()
             gPMPConnectionConfig.TCPAvaliable = FALSE;
         }
     }
-#if 0
+#ifndef OKN_MT86
     if (gPMPConnectionConfig.TCPAvaliable == FALSE || gTCPDisable)
     {
         AsciiFPrint(DEBUG_FILE_HANDLE, "[PMP] TCP protocol not supported on this device, defaulting to TFTP mode");
@@ -18760,7 +18778,7 @@ MtSupportPMPConnect()
         FreePool(messageBuffer);
         return MtSupportCloseFile(FileHandle);
     }
-#endif
+#endif // OKN_MT86
     return Status;
 #else
     return EFI_SUCCESS;

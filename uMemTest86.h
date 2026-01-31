@@ -46,6 +46,10 @@
 #ifndef _MEM_TEST_H_INCLUDED_
 #define _MEM_TEST_H_INCLUDED_
 
+#ifndef OKN_MT86
+#define OKN_MT86
+#endif
+
 // #define CUSTOM_HP_BUILD
 
 // Application
@@ -105,7 +109,11 @@
 
 #define UNICODE_FONT_FILENAME L"unifont.bin" // Unifont font file to load if one or more languages are unsupported by the system font
 
-#define DEFAULT_NUM_PASSES 1 // Default number of passes to run
+#ifndef OKN_MT86
+#define DEFAULT_NUM_PASSES 4 // Default number of passes to run
+#else
+#define DEFAULT_NUM_PASSES 1
+#endif
 
 #define DEFAULT_REPORT_NUM_ERRORS 10 // Default number of errors to include in the report
 #define MAX_REPORT_NUM_ERRORS 5000   // Max number of errors to include in the report
@@ -154,7 +162,7 @@
 #define BitExtractULL(dwReg, wIndexHigh, dwIndexLow) (RShiftU64((UINT64)(dwReg), dwIndexLow) & (LShiftU64(1, ((wIndexHigh) - (dwIndexLow) + 1)) - 1))
 
 // For debug logging
-#define BUF_SIZE 1536
+#define BUF_SIZE 1024
 extern char gBuffer[BUF_SIZE];
 extern CHAR16 g_wszBuffer[BUF_SIZE];
 

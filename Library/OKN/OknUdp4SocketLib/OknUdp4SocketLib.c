@@ -1,14 +1,5 @@
-#include <Library/PrintLib.h>
-#include <Library/UefiBootServicesTableLib.h>
-#include <Library/UefiLib.h>
-#include <Protocol/DevicePath.h>
-#include <Protocol/Dhcp4.h>
-#include <Protocol/Ip4Config2.h>
-#include <Protocol/SimpleNetwork.h>
-#include <Protocol/Udp4.h>
-#include <Protocol/UsbIo.h>
-
 #include <Library/OKN/OknUdp4SocketLib.h>
+#include <Library/OKN/PortingLibs/cJSONLib.h>
 
 UDP4_SOCKET            *gOknUdpSocketTransmit = NULL;
 UDP4_SOCKET            *gOknUdpRxSockets[MAX_UDP4_RX_SOCKETS];
@@ -16,7 +7,7 @@ UINTN                   gOknUdpRxSocketCount    = 0;
 UDP4_SOCKET            *gOknUdpRxActiveSocket   = NULL;
 EFI_HANDLE              gOknUdpRxActiveSbHandle = NULL;
 UDP4_SOCKET            *gOknJsonCtxSocket       = NULL;
-STATIC volatile BOOLEAN gUdpNicBound            = FALSE;  // ?
+STATIC volatile BOOLEAN gOknUdpNicBound         = FALSE;  // ?
 
 static EFI_HANDLE sDefaultUdp4SbHandle = NULL;
 static CHAR8      sStartOfBuffer[MAX_UDP4_FRAGMENT_LENGTH];
@@ -25,7 +16,7 @@ STATIC VOID OknPrintMac(IN CONST EFI_MAC_ADDRESS *Mac, IN UINT32 HwAddrSize);
 STATIC VOID PrintIpv4A(IN CONST EFI_IPv4_ADDRESS *Ip);
 STATIC VOID OknDisableUdpRxSocket(IN UDP4_SOCKET *Sock);
 
-EFI_STATUS OknUdp4SocketLibConstructor(VOID)
+RETURN_STATUS EFIAPI OknUdp4SocketLibConstructor(VOID)
 {
   EFI_STATUS           Status;
   UINTN                HandleNum;

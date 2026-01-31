@@ -248,7 +248,7 @@ void MmioWrite64(UINT_PTR Address, ULONGLONG Data)
 
 #include "controller.h"
 #include <SysInfoLib/pci.h>
-#include <Library/IntelPortingLib.h>
+#include <Library/OKN/OknMemTestLib.h>
 
 #define Sleep(x) gBS->Stall(x * 1000)
 
@@ -19082,6 +19082,17 @@ static void poll_icelake_sp(struct ecc_info *ctrl)
 
                 slot = rank < 4 ? 0 : 1;
 
+#ifdef OKN_MT86
+               OKN_DIMM_ADDRESS_DETAIL_PLUS OknDimmAddrDetail_ECC = {0};
+			   ZeroMem(&OknDimmAddrDetail_ECC, sizeof(OKN_DIMM_ADDRESS_DETAIL_PLUS));
+               if (EFI_SUCCESS == OknMT_TranslatedAddressFromSystemToDimm(gOknMtProtoPtr, (UINTN)(mcaddr & addrmask), &OknDimmAddrDetail_ECC.AddrDetail)) {
+                   OknDimmAddrDetail_ECC.Type = DIMM_ERROR_TYPE_DATA;
+               } else {
+                   OknDimmAddrDetail_ECC.Type = DIMM_ERROR_TYPE_UNKOWN;
+               }
+               OknMT_EnqueueError(&gOknDimmErrorQueue, &OknDimmAddrDetail_ECC);
+#endif // OKN_MT86
+
                 MtSupportReportECCError((UINTN)(mcaddr & addrmask), !uncorrected_error, -1, CPUPkg, NUM_IMC_BANKS + imc * ctrl->numch + ch, slot);
 
                 _wrmsr64(MSR_IA32_MCi_STATUS(mcbank), 0);
@@ -20025,41 +20036,6 @@ static void poll_emeraldrapids_sp(struct ecc_info *ctrl)
 
                 slot = cs / 4;
 
-                typedef union {
-                    struct {
-                        UINT8   Bg0 : 2;
-                        UINT8   Ba  : 2;
-                        UINT8   Bg1 : 1;
-                        UINT8   Rsvd: 3;
-                    } Bits;
-                    UINT8 Data;
-                } __BANK_FIELD;
-                __BANK_FIELD BkFd = {0};
-                UINT8 BankAdd, BGAdd;
-                BkFd.Data = bank;
-                BGAdd = (UINT8)(BkFd.Bits.Bg0 | (BkFd.Bits.Bg1 << 2));
-                BankAdd = BkFd.Bits.Ba;
-                AsciiPrint("add:%llx;soc:%d;imc:%d;ch:%d;bg:%d;bk:%d;row:0x%x;col:0x%x\n",
-                mcaddr, CPUPkg, imc, ch, BGAdd, BankAdd, row, (col << 2));
-                OKN_DIMM_ADDRESS_DETAIL Detail = {0};
-                if (SysToDimm((UINTN)(mcaddr & addrmask), &Detail) == 0) {
-                    if (uncorrected_error) {
-                        Detail.Type = DIMM_ERROR_TYPE_ECC_UNCORRECTED;
-                    } else {
-                        Detail.Type = DIMM_ERROR_TYPE_ECC_CORRECTED;
-                    }
-                } else {
-                    Detail.Address = (UINTN)(mcaddr & addrmask);
-                    Detail.SocketId = CPUPkg;
-                    Detail.MemCtrlId = imc;
-                    Detail.ChannelId = ch;
-                    Detail.DimmSlot = 0;
-                    Detail.RankId = slot;
-                    Detail.SubChId = sub_rank;
-                    Detail.Type = DIMM_ERROR_TYPE_UNKOWN;
-                }
-                
-                EnqueueError(&gOknDimmErrorQueue, &Detail);
                 MtSupportReportECCError((UINTN)(mcaddr & addrmask), !uncorrected_error, -1, CPUPkg, NUM_IMC_BANKS + imc * ctrl->numch + ch, slot);
 
                 _wrmsr64(MSR_IA32_MCi_STATUS(mcbank), 0);

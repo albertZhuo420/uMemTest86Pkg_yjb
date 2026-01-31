@@ -56,7 +56,6 @@
   BaseLib
   PciLib
   PciExpressLib
-  IntelPortingLib
 
 [LibraryClasses.AARCH64]
   ArmGenericTimerCounterLib

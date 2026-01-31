@@ -44,8 +44,9 @@
   uMemTest86.c
   AdvancedMemoryTest.c
   LineChart.c
-  # TestResultsStorage.c
-  # sha2.c
+  # 下面两个 OKN 注销 TestResultsStorage.c | sha2.c
+  TestResultsStorage.c
+  sha2.c
   SupportLib.c
   Ui.c
   imsdefect.c
@@ -61,9 +62,6 @@
   NetworkPkg/NetworkPkg.dec
   UefiCpuPkg/UefiCpuPkg.dec
   uMemTest86Pkg/uMemTest86Pkg.dec
-  CryptoPkg/CryptoPkg.dec
-  CpRcPkg/CpRcPkg.dec
-  ServerSiliconPkg/SiliconPkg.dec
 
 [Packages.AARCH64]
   ArmPkg/ArmPkg.dec
@@ -86,10 +84,13 @@
   YAMLLib
   LibEg
   NetLib
+  # OKN 添加 ON
   cJSONLib
-  Udp4SocketLib
-  BaseCryptLib
-  IntelPortingLib
+  OknUdp4SocketLib
+  OknDdr4SpdLib
+  OknMemTestLib
+  # OKN 添加 OFF
+
 
 [LibraryClasses.IA32, LibraryClasses.X64]
   MtrrLib
@@ -117,7 +118,9 @@
   gEfiDns4ProtocolGuid
   gEfiTlsServiceBindingProtocolGuid
   gEfiTlsProtocolGuid
+  # OKN 添加 ON
   gEfiSmbiosProtocolGuid
+  # OKN 添加 OFF
 
 [Guids]
   gEfiHardwareErrorVariableGuid
@@ -140,4 +143,6 @@
   # GCC:*_*_X64_CC_FLAGS  = -Wno-error=unused-value -mpopcnt -msse4.1 ## 备份
   GCC:*_*_X64_CC_FLAGS  = -Wno-error=array-parameter -Wno-error=unused-value -Wno-error=unused-but-set-variable -mpopcnt -msse4.1
   GCC:*_*_AARCH64_CC_FLAGS  = -Wno-error=unused-value
+  # OKN 添加 ON
   MSFT:*_*_*_CC_FLAGS = /wd4702
+  # OKN 添加 OFF
