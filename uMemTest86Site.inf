@@ -89,6 +89,7 @@
   OknUdp4SocketLib
   OknDdr4SpdLib
   OknMemTestLib
+  OknMemTestProtocol
   # OKN 添加 OFF
 
 

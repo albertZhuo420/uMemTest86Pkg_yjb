@@ -7,17 +7,11 @@
 
 #define OKN_MAX_HANDLES_TO_PRINT 64u
 
-#define PrintAndStop()                                                                                                 \
-  do {                                                                                                                 \
-    UINTN         EventIndex_tmp;                                                                                      \
-    EFI_INPUT_KEY key;                                                                                                 \
-    Print(L"[%a:%d] ...\r\n", OknMT_GetFileBaseName(__FILE__), __LINE__);                                              \
-    gBS->WaitForEvent(1, &gST->ConIn->WaitForKey, &EventIndex_tmp);                                                    \
-    gST->ConIn->ReadKeyStroke(gST->ConIn, &key);                                                                       \
-  } while (0)
-
+/**
+ * ppProto是一个二级指针;
+ */
 EFI_STATUS OknMT_LocateProtocol(IN INTN                        RequestedIndex,
-                                OUT OKN_MEMORY_TEST_PROTOCOL **pProto,
+                                OUT OKN_MEMORY_TEST_PROTOCOL **ppProto,
                                 OUT EFI_HANDLE                *pChosenHandle,
                                 OUT UINTN                     *pTotalHandles)
 {
@@ -26,11 +20,11 @@ EFI_STATUS OknMT_LocateProtocol(IN INTN                        RequestedIndex,
   UINTN       Count;
   //   UINTN       i; // PrintHandleSummary() 函数实现了再打开
 
-  if (NULL == pProto || NULL == pChosenHandle || NULL == pTotalHandles) {
+  if (NULL == ppProto || NULL == pChosenHandle || NULL == pTotalHandles) {
     return EFI_INVALID_PARAMETER;
   }
 
-  *pProto        = NULL;
+  *ppProto       = NULL;
   *pChosenHandle = NULL;
   *pTotalHandles = 0;
 
@@ -75,7 +69,7 @@ EFI_STATUS OknMT_LocateProtocol(IN INTN                        RequestedIndex,
 
   *pChosenHandle = Handles[RequestedIndex];
 
-  Status = gBS->HandleProtocol(*pChosenHandle, &gOknMemTestProtocolGuid, (VOID **)pProto);
+  Status = gBS->HandleProtocol(*pChosenHandle, &gOknMemTestProtocolGuid, (VOID **)ppProto);
   FreePool(Handles);
 
   return Status;
@@ -206,7 +200,6 @@ EFI_STATUS OknMT_GetMemCfgTFromJson(IN CONST cJSON *pJsTree, OUT OKN_MEMORY_CONF
   cJSON *Por_pVal     = cJSON_GetObjectItemCaseSensitive(pJsTree, "Por");
   cJSON *Ecs_pVal     = cJSON_GetObjectItemCaseSensitive(pJsTree, "Ecs");  // unsupported in DDR4
   cJSON *PprType_pVal = cJSON_GetObjectItemCaseSensitive(pJsTree, "PprType");
-  cJSON *AmtPpr_pVal  = cJSON_GetObjectItemCaseSensitive(pJsTree, "AmtPpr");
   // ECC
   cJSON *DirectoryModeEn_pVal = cJSON_GetObjectItemCaseSensitive(pJsTree, "DirectoryModeEn");
   cJSON *DdrEccEnable_pVal    = cJSON_GetObjectItemCaseSensitive(pJsTree, "DdrEccEnable");
@@ -241,7 +234,6 @@ EFI_STATUS OknMT_GetMemCfgTFromJson(IN CONST cJSON *pJsTree, OUT OKN_MEMORY_CONF
   if ((Por_pVal != NULL)  && (cJSON_Number == Por_pVal->type)) { pCfg->EnforcePopulationPor = (UINT8)Por_pVal->valueu64;}
   if ((Ecs_pVal != NULL)  && (cJSON_Number == Ecs_pVal->type)) { pCfg->ErrorCheckScrub = (UINT8)Ecs_pVal->valueu64;}
   if ((PprType_pVal != NULL)  && (cJSON_Number == PprType_pVal->type)) { pCfg->PprType = (UINT8)PprType_pVal->valueu64;}
-//   if ((AmtPpr_pVal != NULL)  && (cJSON_Number == AmtPpr_pVal->type)) { pCfg->AdvMemTestPpr = (UINT8)AmtPpr_pVal->valueu64;}
   // ECC
   if ((DirectoryModeEn_pVal != NULL) && (cJSON_Number == DirectoryModeEn_pVal->type)) { pCfg->DirectoryModeEn = (UINT8)DirectoryModeEn_pVal->valueu64;}
   if ((DdrEccEnable_pVal != NULL) && (cJSON_Number == DdrEccEnable_pVal->type)) { pCfg->DdrEccEnable = (UINT8)DdrEccEnable_pVal->valueu64;}

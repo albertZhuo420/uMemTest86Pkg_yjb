@@ -5,11 +5,8 @@
 
 #include <Library/OKN/OknMemTestLib.h>
 
-#if 1  // 全局变量 区域 ON
-
-OKN_MEMORY_TEST_PROTOCOL *gOknMtProtoPtr;
-EFI_HANDLE                gOknChosenHandle;
-#endif  // 全局变量 区域 OFF
+OKN_MEMORY_TEST_PROTOCOL *gOknMtProtoPtr   = NULL;
+EFI_HANDLE                gOknChosenHandle = NULL;
 
 /**
  * @description: 初始化 全局变量 gOknMtProtoPtr 和 gOknChosenHandle
@@ -21,7 +18,7 @@ EFI_STATUS OknMT_InitProtocol(VOID)
   EFI_STATUS Status;
   UINTN      HandleCount;
 
-  Status = LocateOknProtocol(HandleIndex, &gOknMtProtoPtr, &gOknChosenHandle, &HandleCount);
+  Status = OknMT_LocateProtocol(HandleIndex, &gOknMtProtoPtr, &gOknChosenHandle, &HandleCount);
   if (TRUE == EFI_ERROR(Status) || NULL == gOknMtProtoPtr) {
     Print(L"Locate OKN MmeTest protocol failed: %r\n", Status);
     Print(L"Hints:\n");
@@ -104,8 +101,6 @@ EFI_STATUS OknMT_SetMemConfig(IN OKN_MEMORY_TEST_PROTOCOL *pProto, IN CONST cJSO
     }
   }
 
-  cJSON_AddBoolToObject(pJsTree, "SUCCESS", (FALSE == EFI_ERROR(Status)));
-
   return EFI_SUCCESS;
 }
 
@@ -139,7 +134,7 @@ EFI_STATUS OknMT_SetAmtConfig(IN OKN_MEMORY_TEST_PROTOCOL *pProto, IN CONST cJSO
     Print(L"[OKN_UEFI_ERR] Missing/invalid LOOPS\n");
     return EFI_INVALID_PARAMETER;
   }
-  Status = JsonGetU8FromObject(pJsTree, "AMT_PPR", &AmtPpr);
+  Status = OknMT_JsonGetU8FromObject(pJsTree, "AMT_PPR", &AmtPpr);
   if (TRUE == EFI_ERROR(Status)) {
     Print(L"[OKN_UEFI_ERR] Missing/invalid AMT_PPR\n");
     return EFI_INVALID_PARAMETER;
@@ -298,7 +293,7 @@ EFI_STATUS OknMT_GetDimmTemperature(IN OKN_MEMORY_TEST_PROTOCOL *pProto, IN CONS
     return Status;
   }
 
-  pTSensor0 = Ts0;
+  *pTSensor0 = Ts0;
 
   return EFI_SUCCESS;
 }

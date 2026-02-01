@@ -10,6 +10,12 @@
   FILE_GUID                      = 55A2E0D2-8C4A-4A05-A1A3-9B54E2D8B7B2
   MODULE_TYPE                    = BASE
   VERSION_STRING                 = 0.1.0
+  # 关键: 声明这是一个库实例, 没这个就链接不到 gOknMemTestProtocolGuid;
+  LIBRARY_CLASS                  = OknMemTestProtocol
 
 [Sources]
   OknMemTestProtocol.c
+
+[Packages]
+  MdePkg/MdePkg.dec
+  uMemTest86Pkg/uMemTest86Pkg.dec

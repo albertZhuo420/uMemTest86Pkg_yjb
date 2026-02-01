@@ -9636,8 +9636,8 @@ MtSupportTestConfig()
             return ID_BUTTON_START;
         }
 
-        if (EfiResetCold == gOknTestReset || EfiResetWarm == gOknTestReset || EfiResetShutdown == gOknTestReset) {
-            gRT->ResetSystem(gOknTestReset, 0, 0, NULL);
+        if (Okn_EfiResetCold == gOknTestReset || Okn_EfiResetWarm == gOknTestReset || Okn_EfiResetShutdown == gOknTestReset) {
+            gRT->ResetSystem((EFI_RESET_TYPE)gOknTestReset, 0, 0, NULL);
         }
         gBS->CheckEvent(gST->ConIn->WaitForKey);
         // gBS->Stall(50000);

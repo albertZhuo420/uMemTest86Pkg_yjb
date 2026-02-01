@@ -16,10 +16,11 @@
 #
 
 [Sources]
+  OknMemTestLibDEQueue.c
   OknMemTestLibJson.c
   OknMemTestLibNetwork.c
+  OknMemTestLibProto.c
   OknMemTestLibProtoUtils.c
-  OknMemTestLibDEQueue.c
 
 [Packages]
   MdePkg/MdePkg.dec

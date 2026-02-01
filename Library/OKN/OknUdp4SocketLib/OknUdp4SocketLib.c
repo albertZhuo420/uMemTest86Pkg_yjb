@@ -1,3 +1,4 @@
+#include <Library/OKN/OknMemTestLib.h>
 #include <Library/OKN/OknUdp4SocketLib.h>
 #include <Library/OKN/PortingLibs/cJSONLib.h>
 
@@ -13,7 +14,7 @@ static EFI_HANDLE sDefaultUdp4SbHandle = NULL;
 static CHAR8      sStartOfBuffer[MAX_UDP4_FRAGMENT_LENGTH];
 
 STATIC VOID OknPrintMac(IN CONST EFI_MAC_ADDRESS *Mac, IN UINT32 HwAddrSize);
-STATIC VOID PrintIpv4A(IN CONST EFI_IPv4_ADDRESS *Ip);
+STATIC VOID OknPrintIpv4A(IN CONST EFI_IPv4_ADDRESS *Ip);
 STATIC VOID OknDisableUdpRxSocket(IN UDP4_SOCKET *Sock);
 
 RETURN_STATUS EFIAPI OknUdp4SocketLibConstructor(VOID)
@@ -449,7 +450,7 @@ VOID OknUdp4ReceiveHandler(IN EFI_EVENT Event, IN VOID *Context)
   if (Tree != NULL) {
     // 9) 设置 JsonHandler 上下文: 确保 areyouok 填的是“当前 NIC”的 MAC/IP
     gOknJsonCtxSocket = Socket;
-    JsonHandler(Tree);
+    OknMT_DispatchJsonCmd(gOknMtProtoPtr, Tree, &gOknTestReset);
     gOknJsonCtxSocket = NULL;
 
     // 10) 生成响应 JSON（cJSON_PrintUnformatted 返回需要 cJSON_free 的内存）
@@ -537,7 +538,7 @@ EFI_STATUS OknWaitForUdpNicBind(UINTN TimeoutMs)
   UINTN Elapsed = 0;
   UINTN Tick    = 0;
 
-  UDP_LOG("OknWaitForUdpNicBind() start, timeout=%u ms", TimeoutMs);
+  Print(L"OknWaitForUdpNicBind() start, timeout=%u ms", TimeoutMs);
 
   while (NULL == gOknUdpRxActiveSocket) {
     OknPollAllUdpSockets();
@@ -547,16 +548,16 @@ EFI_STATUS OknWaitForUdpNicBind(UINTN TimeoutMs)
     Tick++;
 
     if (0 == (Tick % 100)) {  // 约 1 秒
-      UDP_LOG("Waiting bind... Elapsed=%u ms Active=%p", Elapsed, gOknUdpRxActiveSocket);
+      Print(L"Waiting bind... Elapsed=%u ms Active=%p", Elapsed, gOknUdpRxActiveSocket);
     }
 
     if (TimeoutMs != 0 && Elapsed >= TimeoutMs) {
-      UDP_LOG("OknWaitForUdpNicBind() TIMEOUT");
+      Print(L"OknWaitForUdpNicBind() TIMEOUT");
       return EFI_TIMEOUT;
     }
   }
 
-  UDP_LOG("OknWaitForUdpNicBind() DONE, Active=%p", gOknUdpRxActiveSocket);
+  Print(L"OknWaitForUdpNicBind() DONE, Active=%p", gOknUdpRxActiveSocket);
   return EFI_SUCCESS;
 }
 
@@ -743,7 +744,7 @@ STATIC VOID OknPrintMac(IN CONST EFI_MAC_ADDRESS *Mac, IN UINT32 HwAddrSize)
   }
 }
 
-STATIC VOID PrintIpv4A(IN CONST EFI_IPv4_ADDRESS *Ip)
+STATIC VOID OknPrintIpv4A(IN CONST EFI_IPv4_ADDRESS *Ip)
 {
   Print(L"%u.%u.%u.%u", (UINTN)Ip->Addr[0], (UINTN)Ip->Addr[1], (UINTN)Ip->Addr[2], (UINTN)Ip->Addr[3]);
 }

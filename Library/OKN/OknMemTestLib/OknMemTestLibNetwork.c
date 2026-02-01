@@ -17,6 +17,8 @@
  *    └─ UDP4 Tx (gOknUdpSocketTransmit->Transmit) -> 回发给上位机
  */
 
+ #define CMD_ENTRY(_name, _handler) {(_name), (_handler)}
+
 extern struct {
   UINT32 CurPattern[4];
   UINT32 NewPattern[4];
@@ -27,10 +29,6 @@ extern struct {
 #if 1  // OKN 前置定义区域 ON
 /**STATIC函数 前置定义区域1**************************************************************/
 STATIC UINTN      OknMT_CmdTableCount(VOID);
-STATIC EFI_STATUS OknMT_DispatchJsonCmd(IN OKN_MEMORY_TEST_PROTOCOL *Proto,
-                                        IN OUT cJSON                *Tree,
-                                        OUT EFI_RESET_TYPE          *OutResetType,
-                                        OUT BOOLEAN                 *OutNeedReset);
 STATIC EFI_STATUS OknMT_SmbiosGetOptionalStringByIndex(IN CONST CHAR8   *OptionalStrStart,
                                                        IN UINT8          Index,
                                                        OUT CONST CHAR8 **OutStr);
@@ -63,11 +61,9 @@ UINTN                gOknLastPercent;  // 用在uMemTest86Pkg/Ui.c 文件中: mL
 BOOLEAN              gOKnSkipWaiting = FALSE;
 BOOLEAN              gOknTestStart   = FALSE;
 BOOLEAN              gOknTestPause   = FALSE;
-EFI_RESET_TYPE       gOknTestReset   = EfiResetPlatformSpecific;
+OKN_EFI_RESET_TYPE   gOknTestReset   = Okn_EfiResetNone;
 OKN_TEST_STATUS_TYPE gOknTestStatus  = OKN_TST_Unknown;
 INT8                 gOknMT86TestID  = -1;  // 这个是MT86真实的TestID [0 ... 15]
-
-  #define CMD_ENTRY(_name, _handler) {(_name), (_handler)}
 
 STATIC CONST OKN_MT_CMD_DISPATCH gOknCmdTable[] = {
     // ---- 新命令名（对外只暴露这些）----
@@ -98,33 +94,24 @@ STATIC CONST OKN_MT_CMD_DISPATCH gOknCmdTable[] = {
 /*************************************************************************************************/
 #endif  // OKN 前置定义区域 OFF
 
-#if 1  // STATIC函数实现区域 ON
-STATIC UINTN OknMT_CmdTableCount(VOID)
+EFI_STATUS
+OknMT_DispatchJsonCmd(IN OKN_MEMORY_TEST_PROTOCOL *Proto, IN OUT cJSON *Tree, OUT OKN_EFI_RESET_TYPE *OutResetType)
 {
-  return sizeof(gOknCmdTable) / sizeof(gOknCmdTable[0]);
-}
+  CHAR8 AsciiSPrintBuffer[OKN_BUF_SIZE] = {0};
 
-STATIC EFI_STATUS OknMT_DispatchJsonCmd(IN OKN_MEMORY_TEST_PROTOCOL *Proto,
-                                        IN OUT cJSON                *Tree,
-                                        OUT EFI_RESET_TYPE          *OutResetType,
-                                        OUT BOOLEAN                 *OutNeedReset)
-{
-  if (Tree == NULL) {
+  if (NULL == Tree) {
     return EFI_INVALID_PARAMETER;
   }
 
-  if (OutNeedReset) {
-    *OutNeedReset = FALSE;
-  }
-  if (OutResetType) {
-    *OutResetType = EfiResetCold;
+  if (OutResetType != NULL) {
+    *OutResetType = Okn_EfiResetNone;
   }
 
   cJSON *Cmd = cJSON_GetObjectItemCaseSensitive(Tree, "CMD");
-  if (Cmd == NULL || Cmd->type != cJSON_String || Cmd->valuestring == NULL) {
+  if (NULL == Cmd || Cmd->type != cJSON_String || NULL == Cmd->valuestring) {
     // 这里你可以用 OknMT_JsonSetBool/JsonSetString（如果你已有封装）
-    cJSON_AddBoolToObject(Tree, "SUCCESS", FALSE);
-    cJSON_AddStringToObject(Tree, "ERROR", "Missing/invalid CMD (string)");
+    OknMT_JsonSetBool(Tree, "SUCCESS", FALSE);
+    OknMT_JsonSetString(Tree, "ERROR", "Missing/invalid CMD (string)");
     return EFI_INVALID_PARAMETER;
   }
 
@@ -137,26 +124,33 @@ STATIC EFI_STATUS OknMT_DispatchJsonCmd(IN OKN_MEMORY_TEST_PROTOCOL *Proto,
   CONST CHAR8 *CmdStr = (CONST CHAR8 *)Cmd->valuestring;
 
   for (UINTN i = 0; i < OknMT_CmdTableCount(); i++) {
-    if (AsciiStrCmp(CmdStr, gOknCmdTable[i].CmdName) == 0) {
+    if (OKN_STRING_EQUAL == AsciiStrCmp(CmdStr, gOknCmdTable[i].CmdName)) {
       EFI_STATUS Status = gOknCmdTable[i].Handler(&Ctx);
 
-      // 可选：统一回显 SUCCESS（如果你希望所有命令都带 SUCCESS）
-      // cJSON_AddBoolToObject(Tree, "SUCCESS", EFI_ERROR(Status) ? FALSE : TRUE);
+      // 统一回显 SUCCESS（如果你希望所有命令都带 SUCCESS）
+      OknMT_JsonSetBool(Tree, "SUCCESS", EFI_ERROR(Status) ? FALSE : TRUE);
 
-      if (!EFI_ERROR(Status) && Ctx.ResetReq) {
-        if (OutNeedReset)
-          *OutNeedReset = TRUE;
-        if (OutResetType)
+      if (FALSE == EFI_ERROR(Status) && TRUE == Ctx.ResetReq) {
+        if (OutResetType != NULL) {
           *OutResetType = Ctx.ResetType;
+        }
       }
+
       return Status;
     }
   }
 
-  cJSON_AddBoolToObject(Tree, "SUCCESS", FALSE);
-  cJSON_AddStringToObject(Tree, "ERROR", "Unsupported CMD");
+  OknMT_JsonSetBool(Tree, "SUCCESS", FALSE);
+  AsciiSPrint(AsciiSPrintBuffer, OKN_BUF_SIZE, "Unsupported CMD: %s", Cmd->valuestring);
+  OknMT_JsonSetString(Tree, "ERROR", AsciiSPrintBuffer);
 
   return EFI_UNSUPPORTED;
+}
+
+#if 1  // STATIC函数实现区域 ON
+STATIC UINTN OknMT_CmdTableCount(VOID)
+{
+  return sizeof(gOknCmdTable) / sizeof(gOknCmdTable[0]);
 }
 
 // 从 SMBIOS Optional String Area(以 '\0\0' 结束)中, 按 1-based Index 获取字符串指针.
@@ -166,7 +160,7 @@ STATIC EFI_STATUS OknMT_SmbiosGetOptionalStringByIndex(IN CONST CHAR8   *Optiona
                                                        IN UINT8          Index,
                                                        OUT CONST CHAR8 **OutStr)
 {
-  if (OptionalStrStart == NULL || OutStr == NULL) {
+  if (NULL == OptionalStrStart || NULL == OutStr) {
     return EFI_INVALID_PARAMETER;
   }
 
@@ -255,7 +249,7 @@ STATIC EFI_STATUS OknMT_ProcessJsonCmd_ResetSystem(OKN_MT_CMD_CTX *Ctx)
   EFI_RESET_TYPE Rt = EfiResetCold;
 
   Status = Cmd_ResetSystem(Ctx->Tree, &Rt);
-  if (!EFI_ERROR(Status)) {
+  if (FALSE == EFI_ERROR(Status)) {
     Ctx->ResetType = Rt;
     Ctx->ResetReq  = TRUE;
   }
@@ -373,7 +367,7 @@ STATIC EFI_STATUS Cmd_MT86Start(IN cJSON *pJsTree)
   OknMT_InitErrorQueue(&gOknDimmErrorQueue);
 
   cJSON *Id = cJSON_GetObjectItemCaseSensitive(pJsTree, "ID");
-  if (Id == NULL || Id->type != cJSON_Number || Id->valueu64 > gNumCustomTests + 47 || Id->valueu64 < 47) {
+  if (NULL == Id || Id->type != cJSON_Number || Id->valueu64 > gNumCustomTests + 47 || Id->valueu64 < 47) {
     Print(L"[OKN_UEFI_ERR] [%s] Invalid test ID\n", __func__);
     return EFI_INVALID_PARAMETER;
   }
@@ -643,14 +637,12 @@ STATIC EFI_STATUS Cmd_ResetSystem(IN OUT cJSON *pTree, OUT EFI_RESET_TYPE *pRese
 
   Status = OknMT_JsonGetU32FromObject(pTree, "TYPE", &TypeU32);
   if (EFI_ERROR(Status)) {
-    OknMT_JsonSetBool(pTree, "SUCCESS", FALSE);
     OknMT_JsonSetString(pTree, "ERROR", "Missing/invalid TYPE (number 0..2)");
     return Status;
   }
 
   // 只支持 0/1/2，不支持 3（PlatformSpecific）,因为那需要 ResetData GUID
   if (TypeU32 > EfiResetShutdown) {  // EfiResetShutdown == 2
-    OknMT_JsonSetBool(pTree, "SUCCESS", FALSE);
     if (EfiResetPlatformSpecific == TypeU32) {
       OknMT_JsonSetString(pTree,
                           "ERROR",
@@ -664,7 +656,6 @@ STATIC EFI_STATUS Cmd_ResetSystem(IN OUT cJSON *pTree, OUT EFI_RESET_TYPE *pRese
   *pResetType = (EFI_RESET_TYPE)TypeU32;
 
   OknMT_JsonSetNumber(pTree, "TYPE", (INTN)TypeU32);  // 规范化回显
-  OknMT_JsonSetString(pTree, "ERROR", "");
 
   return EFI_SUCCESS;
 }

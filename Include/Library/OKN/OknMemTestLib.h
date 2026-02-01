@@ -16,6 +16,23 @@
 #define OKN_MAGIC_NUMBER 9527
 #define OKN_BUF_SIZE     2048
 
+#define OKN_STRING_EQUAL 0
+
+#define OknDebugPrintAndStop()                                                                                         \
+  do {                                                                                                                 \
+    UINTN         EventIndex_tmp;                                                                                      \
+    EFI_INPUT_KEY key;                                                                                                 \
+    Print(L"[%a:%d] ...\r\n", OknMT_GetFileBaseName(__FILE__), __LINE__);                                              \
+    gBS->WaitForEvent(1, &gST->ConIn->WaitForKey, &EventIndex_tmp);                                                    \
+    gST->ConIn->ReadKeyStroke(gST->ConIn, &key);                                                                       \
+  } while (0)
+
+#define OknWaitForKeyForever()                                                                                         \
+  do {                                                                                                                 \
+    UINTN         EventIndex_tmp;                                                                                      \
+    gBS->WaitForEvent(1, &gST->ConIn->WaitForKey, &EventIndex_tmp);                                                    \
+  } while (TRUE)
+
 /**
  * 后期可以添加idx, 能不能连的上, 连不上就说明有遗漏
  */
@@ -26,8 +43,8 @@ typedef struct {
   BOOLEAN   LockInitialized;
 
   OKN_DIMM_ADDRESS_DETAIL_PLUS AddrBuffer[OKN_MAX_ADDRESS_RECORD_SIZE];
-  UINTN                      Head;
-  UINTN                      Tail;
+  UINTN                        Head;
+  UINTN                        Tail;
 } DIMM_ERROR_QUEUE;
 
 typedef enum {
@@ -37,11 +54,46 @@ typedef enum {
   OKN_TST_Unknown = 0xFF
 } OKN_TEST_STATUS_TYPE;
 
+/// @brief OKN_EFI_RESET_TYPE 来自 MdePkg/Include/Uefi/UefiMultiPhase.h: EFI_RESET_TYPE
+typedef enum {
+  ///
+  /// Used to induce a system-wide reset. This sets all circuitry within the
+  /// system to its initial state.  This type of reset is asynchronous to system
+  /// operation and operates withgout regard to cycle boundaries.  EfiColdReset
+  /// is tantamount to a system power cycle.
+  ///
+  Okn_EfiResetCold,
+  ///
+  /// Used to induce a system-wide initialization. The processors are set to their
+  /// initial state, and pending cycles are not corrupted.  If the system does
+  /// not support this reset type, then an EfiResetCold must be performed.
+  ///
+  Okn_EfiResetWarm,
+  ///
+  /// Used to induce an entry into a power state equivalent to the ACPI G2/S5 or G3
+  /// state.  If the system does not support this reset type, then when the system
+  /// is rebooted, it should exhibit the EfiResetCold attributes.
+  ///
+  Okn_EfiResetShutdown,
+  ///
+  /// Used to induce a system-wide reset. The exact type of the reset is defined by
+  /// the EFI_GUID that follows the Null-terminated Unicode string passed into
+  /// ResetData. If the platform does not recognize the EFI_GUID in ResetData the
+  /// platform must pick a supported reset type to perform. The platform may
+  /// optionally log the parameters from any non-normal reset that occurs.
+  ///
+  Okn_EfiResetPlatformSpecific,
+  ///
+  /// Okn_EfiResetNone 是一个无效的TYPE, 用于初始化
+  ///
+  Okn_EfiResetNone
+} OKN_EFI_RESET_TYPE;
+
 extern UINTN                gOknLastPercent;
 extern BOOLEAN              gOKnSkipWaiting;
 extern BOOLEAN              gOknTestStart;
 extern BOOLEAN              gOknTestPause;
-extern EFI_RESET_TYPE       gOknTestReset;
+extern OKN_EFI_RESET_TYPE   gOknTestReset;
 extern OKN_TEST_STATUS_TYPE gOknTestStatus;  // 0:end 1:testing 2:abort
 extern INT8                 gOknMT86TestID;  // 这个是MT86真实的TestID [0 ... 15]
 
@@ -70,7 +122,7 @@ extern UINTN    gNumPasses;       // number of passes of the test sequence to pe
 typedef struct {
   OKN_MEMORY_TEST_PROTOCOL *Proto;      // 可为 NULL（某些命令不需要）
   cJSON                    *Tree;       // IN/OUT：请求树 & 回包树（你现在就是这么用的）
-  EFI_RESET_TYPE            ResetType;  // ResetSystem 成功后填
+  OKN_EFI_RESET_TYPE        ResetType;  // ResetSystem 成功后填
   BOOLEAN                   ResetReq;   // 是否请求重启
 } OKN_MT_CMD_CTX;
 
@@ -113,15 +165,20 @@ EFI_STATUS   OknMT_GetSocketChannelDImmPtrsFromJson(IN OKN_MEMORY_TEST_PROTOCOL 
                                                     OUT cJSON                   *pChannel,
                                                     OUT cJSON                   *pDimm);
 CONST CHAR8 *OknMT_GetFileBaseName(IN CONST CHAR8 *Path);
+
+EFI_STATUS
+OknMT_DispatchJsonCmd(IN OKN_MEMORY_TEST_PROTOCOL *Proto, IN OUT cJSON *Tree, OUT OKN_EFI_RESET_TYPE *OutResetType);
 /**
  * OknMemTestLibJson.c
  */
 EFI_STATUS OknMT_JsonGetU64(IN CONST cJSON *Item, OUT UINT64 *Val);
 EFI_STATUS OknMT_JsonGetU32FromObject(IN CONST cJSON *Obj, IN CONST CHAR8 *Key, OUT UINT32 *Val);
 EFI_STATUS OknMT_JsonGetU16FromObject(IN CONST cJSON *Obj, IN CONST CHAR8 *Key, OUT UINT16 *Val);
+EFI_STATUS OknMT_JsonGetU8FromObject(IN CONST cJSON *Obj, IN CONST CHAR8 *Key, OUT UINT8 *Val);
 EFI_STATUS OknMT_JsonGetU8FromArray(IN CONST cJSON *Arr, IN INTN Index, OUT UINT8 *Val);
 EFI_STATUS OknMT_JsonGetU16FromArray(IN CONST cJSON *Arr, IN INTN Index, OUT UINT16 *Val);
 EFI_STATUS OknMT_JsonGetU32FromArray(IN CONST cJSON *Arr, IN INTN Index, OUT UINT32 *Val);
+
 EFI_STATUS OknMT_JsonSetBool(IN cJSON *Obj, IN CONST CHAR8 *Key, IN BOOLEAN Val);
 EFI_STATUS OknMT_JsonSetString(IN cJSON *Obj, IN CONST CHAR8 *Key, IN CONST CHAR8 *Val);
 EFI_STATUS OknMT_JsonSetNumber(IN cJSON *Obj, IN CONST CHAR8 *Key, IN INTN Val);

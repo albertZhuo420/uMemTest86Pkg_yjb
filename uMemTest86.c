@@ -2866,24 +2866,32 @@ UefiMain(
     MtSupportPMPConnect();
 
 #ifdef OKN_MT86
+   Status = OknMT_InitProtocol();
+   if (FALSE == EFI_ERROR(Status)) {
+     Print(L"[OKN_PROTO] OKN MemTest Protocol Init Success!\n");
+   }
+   else {
+     Print(L"[OKN_FATAL_ERROR] OKN MemTest Protocol Init Failed, Please check BIOS and Reset System!\n");
+     OknWaitForKeyForever();
+   }
+
     EFI_UDP4_CONFIG_DATA OknRxConfigData = {
-                          TRUE,                 // AcceptBroadcast
-                          FALSE,                // AcceptPromiscuous
-                          FALSE,                // AcceptAnyPort
-                          TRUE,                 // AllowDuplicatePort
-                          0,                    // TypeOfService
-                          16,                   // TimeToLive
-                          TRUE,                 // DoNotFragment
-                          0,                    // ReceiveTimeout
-                          0,                    // TransmitTimeout
-                          TRUE,                 // UseDefaultAddress
-                          {{0, 0, 0, 0}},       // StationAddress
-                          {{0, 0, 0, 0}},       // SubnetMask
-                          OKN_STATION_UDP_PORT, // StationPort
-                          {{0, 0, 0, 0}},       // RemoteAddress
-                          0,                    // RemotePort
-     };
- 
+        TRUE,                  // AcceptBroadcast
+        FALSE,                 // AcceptPromiscuous
+        FALSE,                 // AcceptAnyPort
+        TRUE,                  // AllowDuplicatePort
+        0,                     // TypeOfService
+        16,                    // TimeToLive
+        TRUE,                  // DoNotFragment
+        0,                     // ReceiveTimeout
+        0,                     // TransmitTimeout
+        TRUE,                  // UseDefaultAddress
+        {{0, 0, 0, 0}},        // StationAddress
+        {{0, 0, 0, 0}},        // SubnetMask
+        OKN_STATION_UDP_PORT,  // StationPort
+        {{0, 0, 0, 0}},        // RemoteAddress
+        0,                     // RemotePort
+    };
     // Listen on all NICs. The first NIC that receives a packet becomes the bound interface.
     OknDumpNetProtoCounts();
     gBS->Stall(4000 * 1000); // 1s, 防止一闪而过
@@ -2892,12 +2900,12 @@ UefiMain(
     gBS->Stall(4000 * 1000); // 1s
 
     Status = OknStartUdp4ReceiveOnAllNics(&OknRxConfigData);
-    Print(L"[UDP] OknStartUdp4ReceiveOnAllNics: %r, RxSockCnt=%u\n", Status, gOknUdpRxSocketCount);
+    Print(L"[OKN_UDP] OknStartUdp4ReceiveOnAllNics: %r, RxSockCnt=%u\n", Status, gOknUdpRxSocketCount);
     gBS->Stall(4 * 1000 * 1000);
-    if (false == EFI_ERROR(Status)) {
+    if (FALSE == EFI_ERROR(Status)) {
       gOKnSkipWaiting = FALSE;
-      MtSupportDebugWriteLine("Waiting for UDP NIC binding (first packet)...");
-      Print(L"Waiting for UDP NIC binding (first packet)...\n");
+      MtSupportDebugWriteLine("[OKN_UDP] Waiting for UDP NIC binding (first packet)...");
+      Print(L"[OKN_UDP] Waiting for UDP NIC binding (first packet)...\n");
       (VOID)OknWaitForUdpNicBind(0);
     } 
     else {
@@ -3312,7 +3320,7 @@ UefiMain(
                                   NULL);
                 }
             }
-#endif OKN_MT86
+#endif // OKN_MT86
             MtSupportGetTestStartTime(&StartTime);
 
             Prefix[0] = L'\0';
@@ -7973,8 +7981,8 @@ UINT16 MainMenu()
                 break;
             }
 
-            if (EfiResetCold == gOknTestReset || EfiResetWarm == gOknTestReset || EfiResetShutdown == gOknTestReset) {
-                gRT->ResetSystem(gOknTestReset, 0, 0, NULL);
+            if (Okn_EfiResetCold == gOknTestReset || Okn_EfiResetWarm == gOknTestReset || Okn_EfiResetShutdown == gOknTestReset) {
+                gRT->ResetSystem((EFI_RESET_TYPE)gOknTestReset, 0, 0, NULL);
             }
         }
         gBS->CheckEvent(gST->ConIn->WaitForKey);
