@@ -311,9 +311,9 @@ EFI_STATUS OknStartUdp4ReceiveOnAllNics(IN EFI_UDP4_CONFIG_DATA *RxCfg)
                                                        (EFI_EVENT_NOTIFY)OknUdp4ReceiveHandler,
                                                        (EFI_EVENT_NOTIFY)OknUdp4NullHandler,
                                                        &Sock);
-    Print(L"[OKN_UDP]  CreateSock: %r, Sock=%p\n", Status, Sock);
+    Print(L"[OKN_UDP]   CreateSock: %r, Sock=%p\n", Status, Sock);
     if (TRUE == EFI_ERROR(Status) || Sock == NULL) {
-      Print(L"  Skip: CreateSock failed\n");
+      Print(L"[OKN_UDP_ERROR]  Skip: CreateSock failed\n");
       continue;
     }
 
@@ -334,15 +334,15 @@ EFI_STATUS OknStartUdp4ReceiveOnAllNics(IN EFI_UDP4_CONFIG_DATA *RxCfg)
     }
     Sock->TokenReceive.Packet.RxData = NULL;
     Status                           = Sock->Udp4->Receive(Sock->Udp4, &Sock->TokenReceive);
-    Print(L"[OKN_UDP]  Receive(submit): %r\n", Status);
-    if (EFI_ERROR(Status)) {
-      Print(L"[OKN_UDP]  Receive() FAILED on SB handle %p: %r\n", Handles[i], Status);
+    Print(L"[OKN_UDP]   Receive(submit): %r\n", Status);
+    if (TRUE == EFI_ERROR(Status)) {
+      Print(L"[OKN_UDP_ERROR]  Receive() FAILED on SB handle %p: %r\n", Handles[i], Status);
       OknCloseUdp4Socket(Sock);
       continue;
     }
 
     gOknUdpRxSockets[gOknUdpRxSocketCount++] = Sock;
-    Print(L"[OKN_UDP]  Added RX socket. Count=%u\n", (UINT32)gOknUdpRxSocketCount);
+    Print(L"[OKN_UDP]   Added RX socket. Count=%u\n", (UINT32)gOknUdpRxSocketCount);
   }  // for() 结束
 
   if (Handles != NULL) {
@@ -455,7 +455,7 @@ VOID OknUdp4ReceiveHandler(IN EFI_EVENT Event, IN VOID *Context)
   }
 
   if (NULL == gOknUdpSocketTransmit) {
-	Print(L"[OKN_UDP_ERROR] Create TX socket Success, but is NULL??!!\n");
+    Print(L"[OKN_UDP_ERROR] Create TX socket Success, but is NULL??!!\n");
     gBS->SignalEvent(RxData->RecycleSignal);
     Socket->TokenReceive.Packet.RxData = NULL;
     Socket->Udp4->Receive(Socket->Udp4, &Socket->TokenReceive);
@@ -607,14 +607,14 @@ UINTN OknCountHandlesByProtocol(IN EFI_GUID *Guid)
 
 VOID OknDumpNetProtoCounts(VOID)
 {
+  // clang-format off
   EFI_GUID Dhcp4SbGuid = EFI_DHCP4_SERVICE_BINDING_PROTOCOL_GUID;  // [NET] DHCP4 SB
-  Print(L"[NET] SNP   handles         : %u\n", (UINT32)OknCountHandlesByProtocol(&gEfiSimpleNetworkProtocolGuid));
-  Print(L"[NET] MNP   Service Binding : %u\n",
-        (UINT32)OknCountHandlesByProtocol(&gEfiManagedNetworkServiceBindingProtocolGuid));
-  Print(L"[NET] IP4   Service Binding : %u\n", (UINT32)OknCountHandlesByProtocol(&gEfiIp4ServiceBindingProtocolGuid));
-  Print(L"[NET] UDP4  Service Binding : %u\n", (UINT32)OknCountHandlesByProtocol(&gEfiUdp4ServiceBindingProtocolGuid));
-  Print(L"[NET] DHCP4 Service Binding : %u\n", (UINT32)OknCountHandlesByProtocol(&Dhcp4SbGuid));
-
+  Print(L"[OKN_NET] SNP   handles         : %u\n", (UINT32)OknCountHandlesByProtocol(&gEfiSimpleNetworkProtocolGuid));
+  Print(L"[OKN_NET] MNP   Service Binding : %u\n", (UINT32)OknCountHandlesByProtocol(&gEfiManagedNetworkServiceBindingProtocolGuid));
+  Print(L"[OKN_NET] IP4   Service Binding : %u\n", (UINT32)OknCountHandlesByProtocol(&gEfiIp4ServiceBindingProtocolGuid));
+  Print(L"[OKN_NET] UDP4  Service Binding : %u\n", (UINT32)OknCountHandlesByProtocol(&gEfiUdp4ServiceBindingProtocolGuid));
+  Print(L"[OKN_NET] DHCP4 Service Binding : %u\n", (UINT32)OknCountHandlesByProtocol(&Dhcp4SbGuid));
+  // clang-format on
   return;
 }
 
@@ -625,7 +625,7 @@ VOID OknConnectAllSnpControllers(VOID)
   UINTN       Count      = 0;
 
   Status = gBS->LocateHandleBuffer(ByProtocol, &gEfiSimpleNetworkProtocolGuid, NULL, &Count, &SnpHandles);
-  Print(L"[NET] Locate SNP: %r, Count=%u\n", Status, (UINT32)Count);  // [NET] Locate SNP: Success, Count=6
+  Print(L"[OKN_NET] Locate SNP: %r, Count=%u\n", Status, (UINT32)Count);  // [NET] Locate SNP: Success, Count=6
 
   if (EFI_ERROR(Status) || 0 == Count) {
     return;
@@ -633,7 +633,7 @@ VOID OknConnectAllSnpControllers(VOID)
 
   for (UINTN i = 0; i < Count; i++) {
     EFI_STATUS S = gBS->ConnectController(SnpHandles[i], NULL, NULL, TRUE);
-    Print(L"[NET] ConnectController(SNP[%u]): %r\n", (UINT32)i, S);
+    Print(L"[OKN_NET] ConnectController(SNP[%u]): %r\n", (UINT32)i, S);
   }
 
   FreePool(SnpHandles);
@@ -665,7 +665,7 @@ EFI_STATUS OknEnsureDhcpIp4Ready(EFI_HANDLE Handle, UINTN TimeoutMs, EFI_IPv4_AD
   Policy = Ip4Config2PolicyDhcp;
   Status = Ip4Cfg2->SetData(Ip4Cfg2, Ip4Config2DataTypePolicy, sizeof(Policy), &Policy);
   if (FALSE == EFI_ERROR(Status)) {
-    Print(L"[OKN_UDP]  IP4Config2 Set Policy DHCP: %r\n", Status);
+    Print(L"[OKN_UDP]   IP4Config2 Set Policy DHCP: %r\n", Status);
   }
   else {
     Print(L"[OKN_UDP_ERROR]  IP4Config2 Set Policy DHCP: %r\n", Status);
@@ -689,7 +689,7 @@ EFI_STATUS OknEnsureDhcpIp4Ready(EFI_HANDLE Handle, UINTN TimeoutMs, EFI_IPv4_AD
       if (FALSE == EFI_ERROR(Status) && IfInfo != NULL && !OknIsZeroIp4(&IfInfo->StationAddress)) {
         *OutIp = IfInfo->StationAddress;
 
-        Print(L"[OKN_UDP]  DHCP Ready: %d.%d.%d.%d / %d.%d.%d.%d\n",
+        Print(L"[OKN_UDP]   DHCP Ready: %d.%d.%d.%d / %d.%d.%d.%d\n",
               IfInfo->StationAddress.Addr[0],
               IfInfo->StationAddress.Addr[1],
               IfInfo->StationAddress.Addr[2],

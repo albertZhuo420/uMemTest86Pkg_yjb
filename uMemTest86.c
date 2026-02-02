@@ -2892,19 +2892,18 @@ UefiMain(
         {{0, 0, 0, 0}},        // RemoteAddress
         0,                     // RemotePort
     };
-    // Listen on all NICs. The first NIC that receives a packet becomes the bound interface.
+
     OknDumpNetProtoCounts();
-    gBS->Stall(4000 * 1000); // 1s, 防止一闪而过
+    gBS->Stall(4000 * 1000); // 防止一闪而过
     OknConnectAllSnpControllers();
     OknDumpNetProtoCounts();
-    gBS->Stall(4000 * 1000); // 1s
+    gBS->Stall(4000 * 1000);
 
     Status = OknStartUdp4ReceiveOnAllNics(&OknRxConfigData);
     Print(L"[OKN_UDP] OknStartUdp4ReceiveOnAllNics: %r, RxSockCnt=%u\n", Status, gOknUdpRxSocketCount);
     gBS->Stall(4 * 1000 * 1000);
     if (FALSE == EFI_ERROR(Status)) {
       gOKnSkipWaiting = FALSE;
-      MtSupportDebugWriteLine("[OKN_UDP] Waiting for UDP NIC binding (first packet)...");
       Print(L"[OKN_UDP] Waiting for UDP NIC binding (first packet)...\n");
       (VOID)OknWaitForUdpNicBind(0);
     } 
