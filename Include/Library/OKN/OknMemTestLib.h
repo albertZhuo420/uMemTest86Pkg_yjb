@@ -157,7 +157,7 @@ EFI_STATUS   OknMT_LocateProtocol(IN INTN                        RequestedIndex,
 VOID         OknMT_PrintMemCfg(IN CONST OKN_MEMORY_CONFIGURATION *Cfg);
 VOID         OknMT_PrintHandleSummary(IN EFI_HANDLE Handle);
 EFI_STATUS   OknMT_SetMemCfgToJson(IN CONST OKN_MEMORY_CONFIGURATION *pCfg, OUT cJSON *pJsTree);
-EFI_STATUS   OknMT_GetMemCfgTFromJson(IN CONST cJSON *pJsTree, OUT OKN_MEMORY_CONFIGURATION *pCfg);
+EFI_STATUS   OknMT_GetMemCfgFromJson(IN CONST cJSON *pJsTree, OUT OKN_MEMORY_CONFIGURATION *pCfg);
 EFI_STATUS   OknMT_GetMemConfigFunc(IN OKN_MEMORY_TEST_PROTOCOL *pProto, IN BOOLEAN Real, OUT cJSON *pJsTree);
 EFI_STATUS   OknMT_GetSocketChannelDImmPtrsFromJson(IN OKN_MEMORY_TEST_PROTOCOL *pProto,
                                                     IN CONST cJSON              *pJsTree,

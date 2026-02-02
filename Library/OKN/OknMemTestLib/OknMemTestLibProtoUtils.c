@@ -167,7 +167,7 @@ EFI_STATUS OknMT_SetMemCfgToJson(IN CONST OKN_MEMORY_CONFIGURATION *pCfg, OUT cJ
   return EFI_SUCCESS;
 }
 
-EFI_STATUS OknMT_GetMemCfgTFromJson(IN CONST cJSON *pJsTree, OUT OKN_MEMORY_CONFIGURATION *pCfg)
+EFI_STATUS OknMT_GetMemCfgFromJson(IN CONST cJSON *pJsTree, OUT OKN_MEMORY_CONFIGURATION *pCfg)
 {
   if (NULL == pCfg || NULL == pJsTree) {
     return EFI_INVALID_PARAMETER;
@@ -212,7 +212,7 @@ EFI_STATUS OknMT_GetMemCfgTFromJson(IN CONST cJSON *pJsTree, OUT OKN_MEMORY_CONF
   if ((Freq_pVal != NULL) && (cJSON_Number == Freq_pVal->type)) { pCfg->DdrFreqLimit = (UINT16)Freq_pVal->valueu64;}
   if ((tCL_pVal != NULL) && (cJSON_Number == tCL_pVal->type)) { pCfg->tCAS = (UINT8)tCL_pVal->valueu64;}
   if ((tRCD_pVal != NULL) && (cJSON_Number == tRCD_pVal->type)) { pCfg->tRCD = (UINT8)tRCD_pVal->valueu64;}
-  if ((tRP_pVal != NULL) && (cJSON_Number == tRP_pVal->type)) { pCfg->tRCD = (UINT8)tRP_pVal->valueu64;}
+  if ((tRP_pVal != NULL) && (cJSON_Number == tRP_pVal->type)) { pCfg->tRP = (UINT8)tRP_pVal->valueu64;}
   if ((tRAS_pVal != NULL) && (cJSON_Number == tRAS_pVal->type)) { pCfg->tRAS = (UINT8)tRAS_pVal->valueu64;}
   if ((tCWL_pVal != NULL) && (cJSON_Number == tCWL_pVal->type)) { pCfg->tCWL = (UINT8)tCWL_pVal->valueu64;}
   if ((tRTP_pVal != NULL) && (cJSON_Number == tRTP_pVal->type)) { pCfg->tRTP = (UINT8)tRTP_pVal->valueu64;}
@@ -226,7 +226,7 @@ EFI_STATUS OknMT_GetMemCfgTFromJson(IN CONST cJSON *pJsTree, OUT OKN_MEMORY_CONF
   if ((tCCD_pVal != NULL) && (cJSON_Number == tCCD_pVal->type)) { pCfg->tCCD = (UINT8)tCCD_pVal->valueu64;}
   if ((CommandRate_pVal != NULL) && (cJSON_Number == CommandRate_pVal->type)) { pCfg->CommandTiming = (UINT8)CommandRate_pVal->valueu64;}
   // Voltages
-  if ((Vdd_pVal != NULL) && (cJSON_Number == Vdd_pVal->type)) { pCfg->DfxPmicVpp = (UINT8)Vdd_pVal->valueu64;}
+  if ((Vdd_pVal != NULL) && (cJSON_Number == Vdd_pVal->type)) { pCfg->DfxPmicVdd = (UINT8)Vdd_pVal->valueu64;}
   if ((Vddq_pVal != NULL) && (cJSON_Number == Vddq_pVal->type)) { pCfg->DfxPmicVddQ = (UINT8)Vddq_pVal->valueu64;}
   if ((Vpp_pVal != NULL) && (cJSON_Number == Vpp_pVal->type)) { pCfg->DfxPmicVpp = (UINT8)Vpp_pVal->valueu64;}
   // MISC
