@@ -60,8 +60,23 @@ EFI_STATUS OknCreateUdp4SocketByServiceBindingHandle(IN EFI_HANDLE            Ud
   EFI_STATUS                    Status;
   EFI_SERVICE_BINDING_PROTOCOL *Udp4Service;
 
+  if (!Udp4ServiceBindingHandle) {
+    Print(L"[OKN_UDP_ERROR]   Udp4ServiceBindingHandle is NULL\n");
+  }
+  if (!ConfigData) {
+    Print(L"[OKN_UDP_ERROR]   ConfigData is NULL\n");
+  }
+  if (!NotifyReceive) {
+    Print(L"[OKN_UDP_ERROR]   NotifyReceive is NULL\n");
+  }
+  if (!NotifyTransmit) {
+    Print(L"[OKN_UDP_ERROR]   NotifyTransmit is NULL\n");
+  }
+
   if (NULL == Udp4ServiceBindingHandle || NULL == ConfigData || NULL == NotifyReceive || NULL == NotifyTransmit ||
-      Socket) {
+      NULL == Socket) {
+    Print(L"[OKN_UDP_ERROR] INVALID PARAMETER, Udp4ServiceBindingHandle/ConfigData/NotifyReceive/NotifyTransmit is "
+          L"NULL\n");
     return EFI_INVALID_PARAMETER;
   }
 
@@ -69,12 +84,14 @@ EFI_STATUS OknCreateUdp4SocketByServiceBindingHandle(IN EFI_HANDLE            Ud
   Udp4Service = NULL;
 
   Status = gBS->HandleProtocol(Udp4ServiceBindingHandle, &gEfiUdp4ServiceBindingProtocolGuid, (VOID **)&Udp4Service);
-  if (EFI_ERROR(Status) || NULL == Udp4Service) {
+  if (TRUE == EFI_ERROR(Status) || NULL == Udp4Service) {
+    Print(L"[OKN_UDP_ERROR] Queries a Udp4Service handle failed: %r\n", Status);
     return EFI_NOT_FOUND;
   }
 
   *Socket = AllocateZeroPool(sizeof(UDP4_SOCKET));
   if (NULL == *Socket) {
+    Print(L"[OKN_UDP_ERROR] AllocateZeroPool() for UDP4_SOCKET failed\n");
     return EFI_OUT_OF_RESOURCES;
   }
 
@@ -83,7 +100,8 @@ EFI_STATUS OknCreateUdp4SocketByServiceBindingHandle(IN EFI_HANDLE            Ud
 
   Status = Udp4Service->CreateChild(Udp4Service, &(*Socket)->ChildHandle);
 
-  if (EFI_ERROR(Status)) {
+  if (TRUE == EFI_ERROR(Status)) {
+    Print(L"[OKN_UDP_ERROR] Udp4Service CreateChild failed: %r\n", Status);
     FreePool(*Socket);
     *Socket = NULL;
     return Status;
@@ -95,7 +113,8 @@ EFI_STATUS OknCreateUdp4SocketByServiceBindingHandle(IN EFI_HANDLE            Ud
                              gImageHandle,
                              NULL,
                              EFI_OPEN_PROTOCOL_BY_HANDLE_PROTOCOL);
-  if (EFI_ERROR(Status) || NULL == (*Socket)->Udp4) {
+  if (TRUE == EFI_ERROR(Status) || NULL == (*Socket)->Udp4) {
+    Print(L"[OKN_UDP_ERROR] Open Udp4 Protocol failed: %r\n", Status);
     Udp4Service->DestroyChild(Udp4Service, (*Socket)->ChildHandle);
     FreePool(*Socket);
     *Socket = NULL;
@@ -104,7 +123,8 @@ EFI_STATUS OknCreateUdp4SocketByServiceBindingHandle(IN EFI_HANDLE            Ud
 
   (*Socket)->ConfigData = *ConfigData;
   Status                = (*Socket)->Udp4->Configure((*Socket)->Udp4, ConfigData);
-  if (EFI_ERROR(Status)) {
+  if (TRUE == EFI_ERROR(Status)) {
+    Print(L"[OKN_UDP_ERROR] Udp4 Configure failed: %r\n", Status);
     Udp4Service->DestroyChild(Udp4Service, (*Socket)->ChildHandle);
     FreePool(*Socket);
     *Socket = NULL;
@@ -120,7 +140,8 @@ EFI_STATUS OknCreateUdp4SocketByServiceBindingHandle(IN EFI_HANDLE            Ud
   (*Socket)->TokenReceive.Packet.RxData = NULL;
 
   Status = gBS->CreateEvent(EVT_NOTIFY_SIGNAL, TPL_CALLBACK, NotifyReceive, *Socket, &(*Socket)->TokenReceive.Event);
-  if (EFI_ERROR(Status)) {
+  if (TRUE == EFI_ERROR(Status)) {
+    Print(L"[OKN_UDP_ERROR] Udp4 CreateEvent for NotifyReceive failed: %r\n", Status);
     Udp4Service->DestroyChild(Udp4Service, (*Socket)->ChildHandle);
     FreePool(*Socket);
     *Socket = NULL;
@@ -128,7 +149,8 @@ EFI_STATUS OknCreateUdp4SocketByServiceBindingHandle(IN EFI_HANDLE            Ud
   }
 
   (*Socket)->TokenTransmit.Packet.TxData = AllocateZeroPool(sizeof(EFI_UDP4_TRANSMIT_DATA));
-  if ((*Socket)->TokenTransmit.Packet.TxData) {
+  if (NULL == (*Socket)->TokenTransmit.Packet.TxData) {
+    Print(L"[OKN_UDP_ERROR] AllocateZeroPool for TxData failed: %r\n", Status);
     gBS->CloseEvent((*Socket)->TokenReceive.Event);
     Udp4Service->DestroyChild(Udp4Service, (*Socket)->ChildHandle);
     FreePool(*Socket);
@@ -137,7 +159,8 @@ EFI_STATUS OknCreateUdp4SocketByServiceBindingHandle(IN EFI_HANDLE            Ud
   }
 
   Status = gBS->CreateEvent(EVT_NOTIFY_SIGNAL, TPL_CALLBACK, NotifyTransmit, *Socket, &(*Socket)->TokenTransmit.Event);
-  if (EFI_ERROR(Status)) {
+  if (TRUE == EFI_ERROR(Status)) {
+    Print(L"[OKN_UDP_ERROR] Udp4 CreateEvent for NotifyTransmit failed: %r\n", Status);
     FreePool((*Socket)->TokenTransmit.Packet.TxData);
     gBS->CloseEvent((*Socket)->TokenReceive.Event);
     Udp4Service->DestroyChild(Udp4Service, (*Socket)->ChildHandle);
@@ -197,7 +220,7 @@ EFI_STATUS OknStartUdp4ReceiveOnAllNics(IN EFI_UDP4_CONFIG_DATA *RxCfg)
   EFI_USB_IO_PROTOCOL         *UsbIo;
   EFI_SIMPLE_NETWORK_PROTOCOL *Snp;
 
-  Print(L"Enter OknStartUdp4ReceiveOnAllNics()\n");
+  Print(L"[OKN_UDP] Enter OknStartUdp4ReceiveOnAllNics()\n");
 
   if (RxCfg == NULL) {
     Print(L"RxCfg == NULL\n");
@@ -208,15 +231,15 @@ EFI_STATUS OknStartUdp4ReceiveOnAllNics(IN EFI_UDP4_CONFIG_DATA *RxCfg)
   HandleNum            = 0;
   gOknUdpRxSocketCount = 0;
 
-  Print(L"LocateHandleBuffer(Udp4ServiceBinding) ...\n");
+  Print(L"[OKN_UDP] LocateHandleBuffer(Udp4ServiceBinding) ...\n");
   Status = gBS->LocateHandleBuffer(ByProtocol, &gEfiUdp4ServiceBindingProtocolGuid, NULL, &HandleNum, &Handles);
-  Print(L"LocateHandleBuffer: %r, HandleNum=%u\n", Status, (UINT32)HandleNum);
+  Print(L"[OKN_UDP] LocateHandleBuffer: %r, HandleNum=%u\n", Status, (UINT32)HandleNum);
   if (EFI_ERROR(Status)) {
-    Print(L"LocateHandleBuffer() failed\n");
+    Print(L"[OKN_UDP_ERROR] LocateHandleBuffer() failed\n");
     return Status;
   }
 
-  Print(L"RxCfg: UseDefault=%u AcceptBroadcast=%u AllowDupPort=%u StationPort=%u RemotePort=%u\n",
+  Print(L"[OKN_UDP] RxCfg: UseDefault=%u AcceptBroadcast=%u AllowDupPort=%u StationPort=%u RemotePort=%u\n",
         (UINT32)RxCfg->UseDefaultAddress,
         (UINT32)RxCfg->AcceptBroadcast,
         (UINT32)RxCfg->AllowDuplicatePort,
@@ -224,13 +247,13 @@ EFI_STATUS OknStartUdp4ReceiveOnAllNics(IN EFI_UDP4_CONFIG_DATA *RxCfg)
         (UINT32)RxCfg->RemotePort);
 
   for (UINTN i = 0; i < HandleNum && gOknUdpRxSocketCount < MAX_UDP4_RX_SOCKETS; i++) {
-    Print(L"SB[%u] Handle=%p\n", (UINT32)i, Handles[i]);
+    Print(L"[OKN_UDP] SB[%u] Handle=%p\n", (UINT32)i, Handles[i]);
 
     // 跳过 USB NIC, 不跳过是不是也行??
     UsbIo  = NULL;
     Status = gBS->HandleProtocol(Handles[i], &gEfiUsbIoProtocolGuid, (VOID **)&UsbIo);
     if (!EFI_ERROR(Status)) {
-      Print(L"  Skip: USB NIC\n");
+      Print(L"[OKN_UDP]   Skip: USB NIC\n");
       continue;
     }
 
@@ -246,13 +269,13 @@ EFI_STATUS OknStartUdp4ReceiveOnAllNics(IN EFI_UDP4_CONFIG_DATA *RxCfg)
     Status = gBS->HandleProtocol(Handles[i], &gEfiSimpleNetworkProtocolGuid, (VOID **)&Snp);
     if (!EFI_ERROR(Status) && Snp != NULL && Snp->Mode != NULL) {
       HasSnp = TRUE;
-      Print(L"  SNP MediaPresent=%u State=%u HwAddrSize=%u\n",
+      Print(L"[OKN_UDP]   SNP MediaPresent=%u State=%u HwAddrSize=%u\n",
             (UINT32)Snp->Mode->MediaPresent,
             (UINT32)Snp->Mode->State,
             (UINT32)Snp->Mode->HwAddressSize);
 
       if (Snp->Mode->HwAddressSize >= 6) {
-        Print(L"  MAC=%02x:%02x:%02x:%02x:%02x:%02x\n",
+        Print(L"[OKN_UDP]   MAC=%02x:%02x:%02x:%02x:%02x:%02x\n",
               Snp->Mode->CurrentAddress.Addr[0],
               Snp->Mode->CurrentAddress.Addr[1],
               Snp->Mode->CurrentAddress.Addr[2],
@@ -262,21 +285,21 @@ EFI_STATUS OknStartUdp4ReceiveOnAllNics(IN EFI_UDP4_CONFIG_DATA *RxCfg)
       }
 
       if (0 == Snp->Mode->MediaPresent) {
-        Print(L"  Warn: Skip for MediaPresent=0\n");
+        Print(L"[OKN_UDP]   Warn: Skip for MediaPresent=0\n");
         continue;
       }
     }
     else {
-      Print(L"  SNP not found or no Mode (Status=%r)\n", Status);
+      Print(L"[OKN_UDP]   SNP not found or no Mode (Status=%r)\n", Status);
       // 不强制 continue: 信步说有的平台 UDP4 SB handle 上不一定挂 SNP
     }
 
     // 先跑 DHCP, 让 UseDefaultAddress=TRUE 有 mapping
     DhcpStatus = OknEnsureDhcpIp4Ready(Handles[i], DhcpTimeoutMs, &Ip);
-    if (EFI_ERROR(DhcpStatus)) {
-      Print(L"  DHCP not ready: %r\n", DhcpStatus);
+    if (TRUE == EFI_ERROR(DhcpStatus)) {
+      Print(L"[OKN_UDP]   DHCP not ready: %r\n", DhcpStatus);
       if (RxCfg->UseDefaultAddress) {
-        Print(L"  Skip: UseDefaultAddress=TRUE requires DHCP mapping\n");
+        Print(L"[OKN_UDP]   Skip: UseDefaultAddress=TRUE requires DHCP mapping\n");
         continue;
       }
     }
@@ -288,8 +311,8 @@ EFI_STATUS OknStartUdp4ReceiveOnAllNics(IN EFI_UDP4_CONFIG_DATA *RxCfg)
                                                        (EFI_EVENT_NOTIFY)OknUdp4ReceiveHandler,
                                                        (EFI_EVENT_NOTIFY)OknUdp4NullHandler,
                                                        &Sock);
-    Print(L"  CreateSock: %r, Sock=%p\n", Status, Sock);
-    if (EFI_ERROR(Status) || Sock == NULL) {
+    Print(L"[OKN_UDP]  CreateSock: %r, Sock=%p\n", Status, Sock);
+    if (TRUE == EFI_ERROR(Status) || Sock == NULL) {
       Print(L"  Skip: CreateSock failed\n");
       continue;
     }
@@ -311,34 +334,35 @@ EFI_STATUS OknStartUdp4ReceiveOnAllNics(IN EFI_UDP4_CONFIG_DATA *RxCfg)
     }
     Sock->TokenReceive.Packet.RxData = NULL;
     Status                           = Sock->Udp4->Receive(Sock->Udp4, &Sock->TokenReceive);
-    Print(L"  Receive(submit): %r\n", Status);
+    Print(L"[OKN_UDP]  Receive(submit): %r\n", Status);
     if (EFI_ERROR(Status)) {
-      Print(L"  Receive() FAILED on SB handle %p: %r\n", Handles[i], Status);
+      Print(L"[OKN_UDP]  Receive() FAILED on SB handle %p: %r\n", Handles[i], Status);
       OknCloseUdp4Socket(Sock);
       continue;
     }
 
     gOknUdpRxSockets[gOknUdpRxSocketCount++] = Sock;
-    Print(L"  Added RX socket. Count=%u\n", (UINT32)gOknUdpRxSocketCount);
+    Print(L"[OKN_UDP]  Added RX socket. Count=%u\n", (UINT32)gOknUdpRxSocketCount);
   }  // for() 结束
 
   if (Handles != NULL) {
     FreePool(Handles);
   }
 
-  Print(L"Exit OknStartUdp4ReceiveOnAllNics(): gOknUdpRxSocketCount=%u\n", (UINT32)gOknUdpRxSocketCount);
+  Print(L"[OKN_UDP] Exit OknStartUdp4ReceiveOnAllNics(): gOknUdpRxSocketCount=%u\n", (UINT32)gOknUdpRxSocketCount);
   gBS->Stall(2 * 1000 * 1000);
   return (gOknUdpRxSocketCount > 0) ? EFI_SUCCESS : EFI_NOT_FOUND;
 }
 
 VOID OknUdp4ReceiveHandler(IN EFI_EVENT Event, IN VOID *Context)
 {
+  EFI_STATUS             Status;
   UDP4_SOCKET           *Socket;
   EFI_UDP4_RECEIVE_DATA *RxData;
-  EFI_STATUS             Status;
 
   Socket = (UDP4_SOCKET *)Context;
-  if (Socket == NULL || Socket->Udp4 == NULL) {
+  if (NULL == Socket || NULL == Socket->Udp4) {
+    Print(L"[OKN_UDP_ERROR] Socket or Socket->Udp4 is NULL.\n");
     return;
   }
 
@@ -346,6 +370,7 @@ VOID OknUdp4ReceiveHandler(IN EFI_EVENT Event, IN VOID *Context)
 
   // 1) Token 完成但没有数据: 按 UEFI UDP4 约定, 重新投递 Receive()
   if (NULL == RxData) {
+    Print(L"[OKN_UDP_WARNING] RxData is NULL\n");
     Socket->TokenReceive.Packet.RxData = NULL;
     Socket->Udp4->Receive(Socket->Udp4, &Socket->TokenReceive);
     return;
@@ -353,14 +378,15 @@ VOID OknUdp4ReceiveHandler(IN EFI_EVENT Event, IN VOID *Context)
 
   // 2) 若 Receive 被 Abort: 回收 RxData 并退出
   if (EFI_ABORTED == Socket->TokenReceive.Status) {
+    Print(L"[OKN_UDP_WARNING] Socket TokenReceive Status is EFI_ABORTED\n");
     gBS->SignalEvent(RxData->RecycleSignal);
     Socket->TokenReceive.Packet.RxData = NULL;
     return;
   }
 
   // 3) 空包: 回收并重新投递
-  if (RxData->DataLength == 0 || RxData->FragmentCount == 0 || RxData->FragmentTable[0].FragmentBuffer == NULL ||
-      RxData->FragmentTable[0].FragmentLength == 0) {
+  if (0 == RxData->DataLength || 0 == RxData->FragmentCount || NULL == RxData->FragmentTable[0].FragmentBuffer ||
+      0 == RxData->FragmentTable[0].FragmentLength) {
     gBS->SignalEvent(RxData->RecycleSignal);
     Socket->TokenReceive.Packet.RxData = NULL;
     Socket->Udp4->Receive(Socket->Udp4, &Socket->TokenReceive);
@@ -368,7 +394,7 @@ VOID OknUdp4ReceiveHandler(IN EFI_EVENT Event, IN VOID *Context)
   }
 
   // 4) 首包绑定: 选择第一个收到包的 NIC, 其它 RX socket 全部禁用
-  if (gOknUdpRxActiveSocket == NULL) {
+  if (NULL == gOknUdpRxActiveSocket) {
     gOknUdpRxActiveSocket   = Socket;
     gOknUdpRxActiveSbHandle = Socket->ServiceBindingHandle;
 
@@ -388,7 +414,7 @@ VOID OknUdp4ReceiveHandler(IN EFI_EVENT Event, IN VOID *Context)
 
   // 6) 懒创建 TX socket: 只创建一次, 绑定到选中的 SB handle
   //    注意: NotifyTransmit 改为 OknUdp4TxFreeHandler, 用于释放本次发送的内存
-  if (gOknUdpSocketTransmit == NULL && gOknUdpRxActiveSbHandle != NULL) {
+  if (NULL == gOknUdpSocketTransmit && gOknUdpRxActiveSbHandle != NULL) {
     EFI_UDP4_CONFIG_DATA TxCfg = {
         TRUE,                  // AcceptBroadcast
         FALSE,                 // AcceptPromiscuous
@@ -416,8 +442,8 @@ VOID OknUdp4ReceiveHandler(IN EFI_EVENT Event, IN VOID *Context)
         (EFI_EVENT_NOTIFY)OknUdp4TxFreeHandler,  // TX 完成释放资源: OknUdp4TxFreeHandler
         &gOknUdpSocketTransmit);
 
-    if (EFI_ERROR(TxStatus)) {
-      Print(L"[UDP] Create TX socket failed: %r\n", TxStatus);
+    if (TRUE == EFI_ERROR(TxStatus)) {
+      Print(L"[OKN_UDP_ERROR] Create TX socket failed: %r\n", TxStatus);
       gOknUdpSocketTransmit = NULL;
     }
     else {
@@ -428,7 +454,8 @@ VOID OknUdp4ReceiveHandler(IN EFI_EVENT Event, IN VOID *Context)
     }
   }
 
-  if (gOknUdpSocketTransmit == NULL) {
+  if (NULL == gOknUdpSocketTransmit) {
+	Print(L"[OKN_UDP_ERROR] Create TX socket Success, but is NULL??!!\n");
     gBS->SignalEvent(RxData->RecycleSignal);
     Socket->TokenReceive.Packet.RxData = NULL;
     Socket->Udp4->Receive(Socket->Udp4, &Socket->TokenReceive);
@@ -487,7 +514,7 @@ VOID OknUdp4ReceiveHandler(IN EFI_EVENT Event, IN VOID *Context)
 
           Status =
               gOknUdpSocketTransmit->Udp4->Transmit(gOknUdpSocketTransmit->Udp4, &gOknUdpSocketTransmit->TokenTransmit);
-          if (EFI_ERROR(Status)) {
+          if (TRUE == EFI_ERROR(Status)) {
             // 发送失败: 立即释放并复位
             gOknUdpSocketTransmit->TxInProgress = FALSE;
             if (gOknUdpSocketTransmit->TxPayload) {
@@ -517,6 +544,7 @@ VOID OknUdp4ReceiveHandler(IN EFI_EVENT Event, IN VOID *Context)
   gBS->SignalEvent(RxData->RecycleSignal);
   Socket->TokenReceive.Packet.RxData = NULL;
   Socket->Udp4->Receive(Socket->Udp4, &Socket->TokenReceive);
+
   return;
 }
 
@@ -538,7 +566,7 @@ EFI_STATUS OknWaitForUdpNicBind(UINTN TimeoutMs)
   UINTN Elapsed = 0;
   UINTN Tick    = 0;
 
-  Print(L"OknWaitForUdpNicBind() start, timeout=%u ms", TimeoutMs);
+  Print(L"[OKN_UDP] OknWaitForUdpNicBind() start, timeout=%u ms", TimeoutMs);
 
   while (NULL == gOknUdpRxActiveSocket) {
     OknPollAllUdpSockets();
@@ -548,16 +576,16 @@ EFI_STATUS OknWaitForUdpNicBind(UINTN TimeoutMs)
     Tick++;
 
     if (0 == (Tick % 100)) {  // 约 1 秒
-      Print(L"Waiting bind... Elapsed=%u ms Active=%p", Elapsed, gOknUdpRxActiveSocket);
+      //   Print(L"[OKN_UDP] Waiting bind... Elapsed=%u ms Active=%p", Elapsed, gOknUdpRxActiveSocket);
     }
 
     if (TimeoutMs != 0 && Elapsed >= TimeoutMs) {
-      Print(L"OknWaitForUdpNicBind() TIMEOUT");
+      Print(L"[OKN_UDP_WARNING] OknWaitForUdpNicBind() TIMEOUT");
       return EFI_TIMEOUT;
     }
   }
 
-  Print(L"OknWaitForUdpNicBind() DONE, Active=%p", gOknUdpRxActiveSocket);
+  Print(L"[OKN_UDP] Wait for Udp Nic bind DONE, Active=%p\n", gOknUdpRxActiveSocket);
   return EFI_SUCCESS;
 }
 
@@ -597,7 +625,7 @@ VOID OknConnectAllSnpControllers(VOID)
   UINTN       Count      = 0;
 
   Status = gBS->LocateHandleBuffer(ByProtocol, &gEfiSimpleNetworkProtocolGuid, NULL, &Count, &SnpHandles);
-  Print(L"[NET] Locate SNP: %r, Count=%u\n", Status, (UINT32)Count);
+  Print(L"[NET] Locate SNP: %r, Count=%u\n", Status, (UINT32)Count);  // [NET] Locate SNP: Success, Count=6
 
   if (EFI_ERROR(Status) || 0 == Count) {
     return;
@@ -628,16 +656,19 @@ EFI_STATUS OknEnsureDhcpIp4Ready(EFI_HANDLE Handle, UINTN TimeoutMs, EFI_IPv4_AD
   UINTN                           IfInfoSize = 0;
 
   Status = gBS->HandleProtocol(Handle, &gEfiIp4Config2ProtocolGuid, (VOID **)&Ip4Cfg2);
-  if (EFI_ERROR(Status) || NULL == Ip4Cfg2) {
-    Print(L"  IP4Config2 not found: %r\n", Status);
+  if (TRUE == EFI_ERROR(Status) || NULL == Ip4Cfg2) {
+    Print(L"[OKN_UDP_ERROR]   IP4Config2 not found: %r\n", Status);
     return Status;
   }
 
   // 1) 设为 DHCP
   Policy = Ip4Config2PolicyDhcp;
   Status = Ip4Cfg2->SetData(Ip4Cfg2, Ip4Config2DataTypePolicy, sizeof(Policy), &Policy);
-  Print(L"  IP4Config2 Set Policy DHCP: %r\n", Status);
-  if (EFI_ERROR(Status)) {
+  if (FALSE == EFI_ERROR(Status)) {
+    Print(L"[OKN_UDP]  IP4Config2 Set Policy DHCP: %r\n", Status);
+  }
+  else {
+    Print(L"[OKN_UDP_ERROR]  IP4Config2 Set Policy DHCP: %r\n", Status);
     return Status;
   }
 
@@ -655,10 +686,10 @@ EFI_STATUS OknEnsureDhcpIp4Ready(EFI_HANDLE Handle, UINTN TimeoutMs, EFI_IPv4_AD
       }
 
       Status = Ip4Cfg2->GetData(Ip4Cfg2, Ip4Config2DataTypeInterfaceInfo, &IfInfoSize, IfInfo);
-      if (!EFI_ERROR(Status) && IfInfo != NULL && !OknIsZeroIp4(&IfInfo->StationAddress)) {
+      if (FALSE == EFI_ERROR(Status) && IfInfo != NULL && !OknIsZeroIp4(&IfInfo->StationAddress)) {
         *OutIp = IfInfo->StationAddress;
 
-        Print(L"  DHCP Ready: %d.%d.%d.%d / %d.%d.%d.%d\n",
+        Print(L"[OKN_UDP]  DHCP Ready: %d.%d.%d.%d / %d.%d.%d.%d\n",
               IfInfo->StationAddress.Addr[0],
               IfInfo->StationAddress.Addr[1],
               IfInfo->StationAddress.Addr[2],
@@ -671,7 +702,7 @@ EFI_STATUS OknEnsureDhcpIp4Ready(EFI_HANDLE Handle, UINTN TimeoutMs, EFI_IPv4_AD
         return EFI_SUCCESS;
       }
 
-      if (IfInfo) {
+      if (IfInfo != NULL) {
         FreePool(IfInfo);
       }
     }
@@ -680,7 +711,7 @@ EFI_STATUS OknEnsureDhcpIp4Ready(EFI_HANDLE Handle, UINTN TimeoutMs, EFI_IPv4_AD
     Waited += 100;
   }
 
-  Print(L"  DHCP timeout (%u ms)\n", (UINT32)TimeoutMs);
+  Print(L"[OKN_UDP_WARNING]  DHCP timeout (%u ms)\n", (UINT32)TimeoutMs);
   return EFI_TIMEOUT;
 }
 
