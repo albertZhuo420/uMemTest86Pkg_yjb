@@ -289,13 +289,13 @@ EFI_STATUS OknMT_GetMemConfigFunc(IN OKN_MEMORY_TEST_PROTOCOL *pProto, IN BOOLEA
 
 EFI_STATUS OknMT_GetSocketChannelDImmPtrsFromJson(IN OKN_MEMORY_TEST_PROTOCOL *pProto,
                                                   IN CONST cJSON              *pJsTree,
-                                                  OUT cJSON                   *pSocket,
-                                                  OUT cJSON                   *pChannel,
-                                                  OUT cJSON                   *pDimm)
+                                                  OUT cJSON                  **ppSocket,
+                                                  OUT cJSON                  **ppChannel,
+                                                  OUT cJSON                  **ppDimm)
 {
-  cJSON *pSocket_tmp  = NULL;
-  cJSON *pChannel_tmp = NULL;
-  cJSON *pDimm_tmp    = NULL;
+  cJSON *pSocket  = NULL;
+  cJSON *pChannel = NULL;
+  cJSON *pDimm    = NULL;
   // 1) 参数检查
   if (NULL == pProto || NULL == pJsTree) {
     Print(L"[OKN_UEFI_ERR] Protocol/SpdRead() or JSON tree is NULL\n");
@@ -303,18 +303,18 @@ EFI_STATUS OknMT_GetSocketChannelDImmPtrsFromJson(IN OKN_MEMORY_TEST_PROTOCOL *p
   }
 
   // 2) 取 Socket/Channel/Dimm
-  pSocket_tmp  = cJSON_GetObjectItemCaseSensitive(pJsTree, "Socket");
-  pChannel_tmp = cJSON_GetObjectItemCaseSensitive(pJsTree, "Channel");
-  pDimm_tmp    = cJSON_GetObjectItemCaseSensitive(pJsTree, "Dimm");
-  if (!cJSON_IsNumber(pSocket_tmp) || !cJSON_IsNumber(pChannel_tmp) || !cJSON_IsNumber(pDimm_tmp)) {
+  pSocket  = cJSON_GetObjectItemCaseSensitive(pJsTree, "Socket");
+  pChannel = cJSON_GetObjectItemCaseSensitive(pJsTree, "Channel");
+  pDimm    = cJSON_GetObjectItemCaseSensitive(pJsTree, "Dimm");
+  if (!cJSON_IsNumber(pSocket) || !cJSON_IsNumber(pChannel) || !cJSON_IsNumber(pDimm)) {
     Print(L"[OKN_UEFI_ERR] Invalid Socket/Channel/Dimm in JSON\n");
     return EFI_INVALID_PARAMETER;
   }
 
   // 3) 输出结果
-  pSocket  = pSocket_tmp;
-  pChannel = pChannel_tmp;
-  pDimm    = pDimm_tmp;
+  *ppSocket  = pSocket;
+  *ppChannel = pChannel;
+  *ppDimm    = pDimm;
 
   return EFI_SUCCESS;
 }

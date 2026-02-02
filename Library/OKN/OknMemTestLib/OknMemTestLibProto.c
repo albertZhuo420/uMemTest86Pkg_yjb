@@ -50,7 +50,7 @@ EFI_STATUS OknMT_IsDimmPresent(IN OKN_MEMORY_TEST_PROTOCOL *pProto, IN CONST cJS
   }
 
   // 2) 取 Socket/Channel/Dimm
-  Status = OknMT_GetSocketChannelDImmPtrsFromJson(pProto, pJsTree, pSocket, pChannel, pDimm);
+  Status = OknMT_GetSocketChannelDImmPtrsFromJson(pProto, pJsTree, &pSocket, &pChannel, &pDimm);
   if (TRUE == EFI_ERROR(Status)) {
     Print(L"[OKN_UEFI_ERR] OknMT_GetSocketChannelDImmPtrsFromJson failed: %r\n", Status);
     return Status;
@@ -241,7 +241,7 @@ EFI_STATUS OknMT_GetDimmRankMapOutReason(IN OKN_MEMORY_TEST_PROTOCOL  *pProto,
   }
 
   // 2) 取 Socket/Channel/Dimm
-  Status = OknMT_GetSocketChannelDImmPtrsFromJson(pProto, pJsTree, pSocket, pChannel, pDimm);
+  Status = OknMT_GetSocketChannelDImmPtrsFromJson(pProto, pJsTree, &pSocket, &pChannel, &pDimm);
   if (TRUE == EFI_ERROR(Status)) {
     Print(L"[OKN_UEFI_ERR] [%s] OknMT_GetSocketChannelDImmPtrsFromJson failed: %r\n", __func__, Status);
     return Status;
@@ -274,7 +274,7 @@ EFI_STATUS OknMT_GetDimmTemperature(IN OKN_MEMORY_TEST_PROTOCOL *pProto, IN CONS
   }
 
   // 2) 取 Socket/Channel/Dimm
-  Status = OknMT_GetSocketChannelDImmPtrsFromJson(pProto, pJsTree, pSocket, pChannel, pDimm);
+  Status = OknMT_GetSocketChannelDImmPtrsFromJson(pProto, pJsTree, &pSocket, &pChannel, &pDimm);
   if (TRUE == EFI_ERROR(Status)) {
     Print(L"[OKN_UEFI_ERR] [%s] OknMT_GetSocketChannelDImmPtrsFromJson failed: %r\n", __func__, Status);
     return Status;
@@ -316,7 +316,7 @@ EFI_STATUS OknMT_ReadSpdToJson(IN OKN_MEMORY_TEST_PROTOCOL *pProto, IN OUT cJSON
   }
 
   // 2) 取 Socket/Channel/Dimm
-  Status = OknMT_GetSocketChannelDImmPtrsFromJson(pProto, pJsTree, Socket, Channel, Dimm);
+  Status = OknMT_GetSocketChannelDImmPtrsFromJson(pProto, pJsTree, &Socket, &Channel, &Dimm);
   if (TRUE == EFI_ERROR(Status)) {
     Print(L"[OKN_UEFI_ERR] OknMT_GetSocketChannelDImmPtrsFromJson failed: %r\n", Status);
     return Status;

@@ -161,9 +161,9 @@ EFI_STATUS   OknMT_GetMemCfgTFromJson(IN CONST cJSON *pJsTree, OUT OKN_MEMORY_CO
 EFI_STATUS   OknMT_GetMemConfigFunc(IN OKN_MEMORY_TEST_PROTOCOL *pProto, IN BOOLEAN Real, OUT cJSON *pJsTree);
 EFI_STATUS   OknMT_GetSocketChannelDImmPtrsFromJson(IN OKN_MEMORY_TEST_PROTOCOL *pProto,
                                                     IN CONST cJSON              *pJsTree,
-                                                    OUT cJSON                   *pSocket,
-                                                    OUT cJSON                   *pChannel,
-                                                    OUT cJSON                   *pDimm);
+                                                    OUT cJSON                   **ppSocket,
+                                                    OUT cJSON                   **ppChannel,
+                                                    OUT cJSON                   **ppDimm);
 CONST CHAR8 *OknMT_GetFileBaseName(IN CONST CHAR8 *Path);
 
 EFI_STATUS
