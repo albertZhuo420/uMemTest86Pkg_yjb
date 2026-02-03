@@ -16,8 +16,6 @@ typedef enum {
   DimmRankMapOutMax
 } DIMM_RANK_MAP_OUT_REASON;
 
-#pragma pack(1)
-
 typedef struct {
   UINT16 DdrFreqLimit;
   UINT8  tCAS;
@@ -114,14 +112,12 @@ typedef struct {
   UINT8  Bank;       // 0..3
   UINT32 Row;
   UINT32 Column;
-} OKN_DIMM_ADDRESS_DETAIL;
+} OKN_DIMM_ADDRESS_DETAIL_BASE;
 
 typedef struct {
-  OKN_DIMM_ADDRESS_DETAIL AddrDetail;
-  OKN_DIMM_ERROR_TYPE     Type;
-} OKN_DIMM_ADDRESS_DETAIL_PLUS;
-
-#pragma pack()
+  OKN_DIMM_ADDRESS_DETAIL_BASE AddrDetail;
+  OKN_DIMM_ERROR_TYPE          Type;
+} OKN_DIMM_ADDRESS_DETAIL;
 
 typedef EFI_STATUS(EFIAPI *OKN_IS_DIMM_PRESENT)(IN UINT8     Socket,
                                                 IN UINT8     Channel,
@@ -136,22 +132,22 @@ typedef EFI_STATUS(EFIAPI *OKN_GET_MEM_DISABLED_REASON)(IN UINT8                
                                                         IN UINT8                      Channel,
                                                         IN UINT8                      Dimm,
                                                         OUT DIMM_RANK_MAP_OUT_REASON *Reason);
-typedef EFI_STATUS(EFIAPI *OKN_GET_DIMM_TEMP)(IN UINT8   Socket,
-                                              IN UINT8   Channel,
-                                              IN UINT8   Dimm,
-                                              OUT UINT8 *Ts0,
-                                              OUT UINT8 *Ts1,
-                                              OUT UINT8 *Hub);
+typedef EFI_STATUS(EFIAPI *OKN_GET_DIMM_TEMP)(IN UINT8    Socket,
+                                              IN UINT8    Channel,
+                                              IN UINT8    Dimm,
+                                              OUT UINT32 *Ts0,
+                                              OUT UINT32 *Ts1,
+                                              OUT UINT32 *Hub);
 // EntryNum Max Value is 5.
 typedef EFI_STATUS(EFIAPI *OKN_INJECT_PPR)(IN UINT8 EntryNum, IN OKN_PPR_INTERFACE *PprEntry);
 typedef EFI_STATUS(
     EFIAPI *OKN_SPD_READ)(IN UINT8 Socket, IN UINT8 Channel, IN UINT8 Dimm, OUT UINT8 *SpdData, OUT INTN *DataLen);
 typedef EFI_STATUS(EFIAPI *OKN_SPD_WRITE)(IN UINT8 Socket, IN UINT8 Channel, IN UINT8 Dimm, IN CONST UINT8 *SpdData);
 /**
- * 这个函数其实就是egs repo中的: EFI_STATUS SysToDimm(UINTN Address, OKN_DIMM_ADDRESS_DETAIL *DimmAddress);
+ * 这个函数其实就是egs repo中的: EFI_STATUS SysToDimm;
  */
-typedef EFI_STATUS(EFIAPI *OKN_ADDRESS_SYSTEM_TO_DIMM)(IN UINTN                     SystemAddress,
-                                                       OUT OKN_DIMM_ADDRESS_DETAIL *TranslatedAddress);
+typedef EFI_STATUS(EFIAPI *OKN_ADDRESS_SYSTEM_TO_DIMM)(IN UINTN                          SystemAddress,
+                                                       OUT OKN_DIMM_ADDRESS_DETAIL_BASE *TranslatedAddress);
 
 typedef struct {
   UINT32                      Revision;          // XX
