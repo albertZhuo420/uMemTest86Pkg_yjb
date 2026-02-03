@@ -4154,8 +4154,8 @@ VOID
     __m128i *perrbits128 = (__m128i *)(((UINTN)errbits128 + 0xF) & ~(0xF));
 
 #ifdef OKN_MT86
-    OKN_DIMM_ADDRESS_DETAIL_PLUS OknAddrDetail_DE = {0};
-    ZeroMem(&OknAddrDetail_DE, sizeof(OKN_DIMM_ADDRESS_DETAIL_PLUS));
+    OKN_DIMM_ADDRESS_DETAIL OknAddrDetail_DE = {0};
+    ZeroMem(&OknAddrDetail_DE, sizeof(OKN_DIMM_ADDRESS_DETAIL));
     if (EFI_SUCCESS == OknMT_TranslatedAddressFromSystemToDimm(gOknMtProtoPtr, Address, &OknAddrDetail_DE.AddrDetail)) {
         OknAddrDetail_DE.Type = DIMM_ERROR_TYPE_DATA;
     }

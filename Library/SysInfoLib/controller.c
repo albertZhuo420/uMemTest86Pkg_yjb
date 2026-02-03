@@ -19083,8 +19083,8 @@ static void poll_icelake_sp(struct ecc_info *ctrl)
                 slot = rank < 4 ? 0 : 1;
 
 #ifdef OKN_MT86
-               OKN_DIMM_ADDRESS_DETAIL_PLUS OknDimmAddrDetail_ECC = {0};
-			   ZeroMem(&OknDimmAddrDetail_ECC, sizeof(OKN_DIMM_ADDRESS_DETAIL_PLUS));
+               OKN_DIMM_ADDRESS_DETAIL OknDimmAddrDetail_ECC = {0};
+			   ZeroMem(&OknDimmAddrDetail_ECC, sizeof(OKN_DIMM_ADDRESS_DETAIL));
                if (EFI_SUCCESS == OknMT_TranslatedAddressFromSystemToDimm(gOknMtProtoPtr, (UINTN)(mcaddr & addrmask), &OknDimmAddrDetail_ECC.AddrDetail)) {
                    OknDimmAddrDetail_ECC.Type = DIMM_ERROR_TYPE_DATA;
                } else {
