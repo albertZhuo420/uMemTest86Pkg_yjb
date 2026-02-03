@@ -13,6 +13,8 @@
 
 #define OKN_MT86
 
+#define OKN_MAX_DIMM_CNT 8
+
 #define OKN_MAGIC_NUMBER 9527
 #define OKN_BUF_SIZE     2048
 
@@ -42,7 +44,7 @@ typedef struct {
   SPIN_LOCK Lock;
   BOOLEAN   LockInitialized;
 
-  OKN_DIMM_ADDRESS_DETAIL_PLUS AddrBuffer[OKN_MAX_ADDRESS_RECORD_SIZE];
+  OKN_DIMM_ADDRESS_DETAIL AddrBuffer[OKN_MAX_ADDRESS_RECORD_SIZE];
   UINTN                        Head;
   UINTN                        Tail;
 } DIMM_ERROR_QUEUE;
@@ -144,9 +146,9 @@ EFI_STATUS OknMT_GetDimmTemperature(IN OKN_MEMORY_TEST_PROTOCOL *pProto, IN CONS
 EFI_STATUS OknMT_GetDimmRankMapOutReason(IN OKN_MEMORY_TEST_PROTOCOL  *pProto,
                                          IN CONST cJSON               *pJsTree,
                                          OUT DIMM_RANK_MAP_OUT_REASON *pReason);
-EFI_STATUS OknMT_TranslatedAddressFromSystemToDimm(IN OKN_MEMORY_TEST_PROTOCOL *pProto,
-                                                   IN UINTN                     SystemAddress,
-                                                   OUT OKN_DIMM_ADDRESS_DETAIL *pTranslatedAddress);
+EFI_STATUS OknMT_TranslatedAddressFromSystemToDimm(IN OKN_MEMORY_TEST_PROTOCOL      *pProto,
+                                                   IN UINTN                          SystemAddress,
+                                                   OUT OKN_DIMM_ADDRESS_DETAIL_BASE *pTranslatedAddress);
 /**
  * 下面是一些辅助工具函数
  */
@@ -189,7 +191,7 @@ EFI_STATUS OknMT_JsonSetNumber(IN cJSON *Obj, IN CONST CHAR8 *Key, IN INTN Val);
 VOID       OknMT_InitErrorQueue(DIMM_ERROR_QUEUE *Queue);
 BOOLEAN    OknMT_IsErrorQueueEmpty(DIMM_ERROR_QUEUE *Queue);
 BOOLEAN    OknMT_IsErrorQueueFull(DIMM_ERROR_QUEUE *Queue);
-VOID       OknMT_EnqueueError(DIMM_ERROR_QUEUE *Queue, OKN_DIMM_ADDRESS_DETAIL_PLUS *Item);
-EFI_STATUS OknMT_DequeueErrorCopy(IN OUT DIMM_ERROR_QUEUE *Queue, OUT OKN_DIMM_ADDRESS_DETAIL_PLUS *OutItem);
+VOID       OknMT_EnqueueError(DIMM_ERROR_QUEUE *Queue, OKN_DIMM_ADDRESS_DETAIL *Item);
+EFI_STATUS OknMT_DequeueErrorCopy(IN OUT DIMM_ERROR_QUEUE *Queue, OUT OKN_DIMM_ADDRESS_DETAIL *OutItem);
 
 #endif  // _OKN_MEM_TEST_UTILS_LIB_H_
