@@ -2,6 +2,8 @@
 #include <Library/OKN/OknUdp4SocketLib.h>
 #include <Library/OKN/PortingLibs/cJSONLib.h>
 
+#define OKN_UDP_DBG
+
 UDP4_SOCKET            *gOknUdpSocketTransmit = NULL;
 UDP4_SOCKET            *gOknUdpRxSockets[MAX_UDP4_RX_SOCKETS];
 UINTN                   gOknUdpRxSocketCount    = 0;
@@ -13,9 +15,14 @@ STATIC volatile BOOLEAN gOknUdpNicBound         = FALSE;  // ?
 static EFI_HANDLE sDefaultUdp4SbHandle = NULL;
 static CHAR8      sStartOfBuffer[MAX_UDP4_FRAGMENT_LENGTH];
 
-STATIC VOID OknPrintMac(IN CONST EFI_MAC_ADDRESS *Mac, IN UINT32 HwAddrSize);
-STATIC VOID OknPrintIpv4A(IN CONST EFI_IPv4_ADDRESS *Ip);
-STATIC VOID OknDisableUdpRxSocket(IN UDP4_SOCKET *Sock);
+STATIC VOID       OknPrintMac(IN CONST EFI_MAC_ADDRESS *Mac, IN UINT32 HwAddrSize);
+STATIC VOID       OknPrintIpv4A(IN CONST EFI_IPv4_ADDRESS Ip);
+STATIC VOID       OknDumpAsciiN(IN CONST VOID *Buf, IN UINTN Len, IN UINTN Max);
+STATIC VOID       OknDisableUdpRxSocket(IN UDP4_SOCKET *Sock);
+STATIC UINTN      OknCountHandlesByProtocol(IN EFI_GUID *Guid);
+STATIC VOID       OknPollAllUdpSockets(VOID);
+STATIC BOOLEAN    OknIsZeroIp4(IN EFI_IPv4_ADDRESS *A);
+STATIC EFI_STATUS OknEnsureDhcpIp4Ready(EFI_HANDLE Handle, UINTN TimeoutMs, EFI_IPv4_ADDRESS *OutIp);
 
 RETURN_STATUS EFIAPI OknUdp4SocketLibConstructor(VOID)
 {
@@ -49,6 +56,268 @@ RETURN_STATUS EFIAPI OknUdp4SocketLibConstructor(VOID)
   }
 
   return (sDefaultUdp4SbHandle != NULL) ? EFI_SUCCESS : EFI_NOT_FOUND;
+}
+
+VOID EFIAPI OknUdp4ReceiveHandler(IN EFI_EVENT Event, IN VOID *Context)
+{
+  EFI_STATUS             Status;
+  UDP4_SOCKET           *Socket;
+  EFI_UDP4_RECEIVE_DATA *RxData;
+
+  Socket = (UDP4_SOCKET *)Context;
+  if (NULL == Socket || NULL == Socket->Udp4) {
+    Print(L"[OKN_UDP_ERROR] Socket or Socket->Udp4 is NULL.\n");
+    return;
+  }
+
+  RxData = Socket->TokenReceive.Packet.RxData;
+
+  // 1) Token 完成但没有数据: 按 UEFI UDP4 约定, 重新投递 Receive()
+  if (NULL == RxData) {
+    Print(L"[OKN_UDP_WARNING] RxData is NULL, Status=%r\n", Socket->TokenReceive.Status);
+    Socket->TokenReceive.Packet.RxData = NULL;
+    Status                             = Socket->Udp4->Receive(Socket->Udp4, &Socket->TokenReceive);
+    Print(L"[OKN_UDP_DEBUG] resubmit Receive: %r\n", Status);
+    return;
+  }
+
+  // 2) 若 Receive 被 Abort: 回收 RxData 并退出
+  if (EFI_ABORTED == Socket->TokenReceive.Status) {
+    Print(L"[OKN_UDP_WARNING] Socket TokenReceive Status is EFI_ABORTED\n");
+    gBS->SignalEvent(RxData->RecycleSignal);
+    Socket->TokenReceive.Packet.RxData = NULL;
+    return;
+  }
+
+  // 3) 空包: 回收并重新投递
+  if (0 == RxData->DataLength || 0 == RxData->FragmentCount || NULL == RxData->FragmentTable[0].FragmentBuffer ||
+      0 == RxData->FragmentTable[0].FragmentLength) {
+    gBS->SignalEvent(RxData->RecycleSignal);
+    Socket->TokenReceive.Packet.RxData = NULL;
+    Socket->Udp4->Receive(Socket->Udp4, &Socket->TokenReceive);
+    return;
+  }
+
+  // 4) 首包绑定: 选择第一个收到包的 NIC, 其它 RX socket 全部禁用
+  if (NULL == gOknUdpRxActiveSocket) {
+    gOknUdpRxActiveSocket   = Socket;
+    gOknUdpRxActiveSbHandle = Socket->ServiceBindingHandle;
+
+    for (UINTN i = 0; i < gOknUdpRxSocketCount; i++) {
+      if (gOknUdpRxSockets[i] != NULL && gOknUdpRxSockets[i] != Socket) {
+        OknDisableUdpRxSocket(gOknUdpRxSockets[i]);
+      }
+    }
+  }
+
+  // 5) 非选中 NIC 上来的包直接丢弃(但要回收 RxData)
+  if (Socket != gOknUdpRxActiveSocket) {
+    gBS->SignalEvent(RxData->RecycleSignal);
+    Socket->TokenReceive.Packet.RxData = NULL;
+    return;
+  }
+
+  // 6) 懒创建 TX socket: 只创建一次, 绑定到选中的 SB handle
+  //    注意: NotifyTransmit 改为 OknUdp4TxFreeHandler, 用于释放本次发送的内存
+  if (NULL == gOknUdpSocketTransmit && gOknUdpRxActiveSbHandle != NULL) {
+    EFI_UDP4_CONFIG_DATA TxCfg = {
+        TRUE,                  // AcceptBroadcast
+        FALSE,                 // AcceptPromiscuous
+        FALSE,                 // AcceptAnyPort
+        TRUE,                  // AllowDuplicatePort
+        0,                     // TypeOfService
+        16,                    // TimeToLive
+        FALSE,                 // DoNotFragment  (Tx 可能很大, 允许分片, 这样避免TX失败)
+        0,                     // ReceiveTimeout
+        0,                     // TransmitTimeout
+        TRUE,                  // UseDefaultAddress
+        {{0, 0, 0, 0}},        // StationAddress
+        {{0, 0, 0, 0}},        // SubnetMask
+        OKN_STATION_UDP_PORT,  // StationPort
+        {{0, 0, 0, 0}},        // RemoteAddress (unused when using UdpSessionData)
+        0,                     // RemotePort    (unused when using UdpSessionData)
+    };
+
+    EFI_STATUS TxStatus;
+
+    TxStatus = OknCreateUdp4SocketByServiceBindingHandle(gOknUdpRxActiveSbHandle,
+                                                         &TxCfg,
+                                                         OknUdp4NullHandler,    // Tx socket 不需要 Receive 回调
+                                                         OknUdp4TxFreeHandler,  // TX 完成释放资源
+                                                         &gOknUdpSocketTransmit);
+
+    if (TRUE == EFI_ERROR(TxStatus)) {
+      Print(L"[OKN_UDP_ERROR] Create TX socket failed: %r\n", TxStatus);
+      gOknUdpSocketTransmit = NULL;
+    }
+    else {
+      // 初始化 TX 内存追踪字段(需要你在 UDP4_SOCKET 结构体中加入这些字段)
+      gOknUdpSocketTransmit->TxPayload    = NULL;
+      gOknUdpSocketTransmit->TxSession    = NULL;
+      gOknUdpSocketTransmit->TxInProgress = FALSE;
+    }
+  }
+
+  if (NULL == gOknUdpSocketTransmit) {
+    Print(L"[OKN_UDP_ERROR] Create TX socket Success, but is NULL??!!\n");
+    gBS->SignalEvent(RxData->RecycleSignal);
+    Socket->TokenReceive.Packet.RxData = NULL;
+    Socket->Udp4->Receive(Socket->Udp4, &Socket->TokenReceive);
+    return;
+  }
+
+  // 7) 若上一次发送还未完成(Token 仍挂起), 为避免覆盖 Token/内存, 直接丢弃本次回复
+  if (gOknUdpSocketTransmit->TxInProgress) {
+    gBS->SignalEvent(RxData->RecycleSignal);
+    Socket->TokenReceive.Packet.RxData = NULL;
+    Socket->Udp4->Receive(Socket->Udp4, &Socket->TokenReceive);
+    return;
+  }
+
+#ifdef OKN_UDP_DBG
+  /**
+   * 在收到包后、Parse 之前打印：来源 IP/端口 + payload 长度 + 前 64 字符
+   */
+  Print(L"[OKN_RX] from ");
+  OknPrintIpv4A(RxData->UdpSession.SourceAddress);
+  Print(L":%u  len=%u  frag0=%u  head=\"",
+        (UINTN)RxData->UdpSession.SourcePort,
+        (UINTN)RxData->DataLength,
+        (UINTN)RxData->FragmentTable[0].FragmentLength);
+
+  Print(L"\"\n");
+  OknDumpAsciiN(RxData->FragmentTable[0].FragmentBuffer, RxData->FragmentTable[0].FragmentLength, 64);
+#endif  // OKN_UDP_DBG
+
+  // 8) 解析 JSON
+  cJSON *Tree = cJSON_ParseWithLength((CONST CHAR8 *)RxData->FragmentTable[0].FragmentBuffer,
+                                      RxData->FragmentTable[0].FragmentLength);
+
+  if (Tree != NULL) {
+    // 9) 设置 JsonHandler 上下文: 确保 areyouok 填的是“当前 NIC”的 MAC/IP
+    gOknJsonCtxSocket = Socket;
+    OknMT_DispatchJsonCmd(gOknMtProtoPtr, Tree, &gOknTestReset);
+    gOknJsonCtxSocket = NULL;
+
+    // 10) 生成响应 JSON(cJSON_PrintUnformatted 返回需要 cJSON_free 的内存)
+    CHAR8 *JsonStr = cJSON_PrintUnformatted(Tree);
+    if (JsonStr != NULL) {
+      UINT32 JsonStrLen = (UINT32)AsciiStrLen(JsonStr);
+
+#ifdef OKN_UDP_DBG
+      Print(L"[OKN_TX_PRE] resp_len=%u\n", (UINTN)JsonStrLen);
+      if (JsonStrLen > 1400) {
+        Print(L"[OKN_TX_WARN] resp too big (%u), DF=%d may fail\n",
+              (UINTN)JsonStrLen,
+              1 /* 你当前 TxCfg.DoNotFragment=TRUE */);
+      }
+#endif  // OKN_UDP_DBG
+
+      // 关键: Transmit 是异步的, 不能直接把 JsonStr 指针塞给 TxData 再立刻释放
+      // 所以这里复制一份到 Pool, TX 完成回调里释放
+      VOID *Payload = AllocateCopyPool(JsonStrLen, JsonStr);
+      cJSON_free(JsonStr);
+
+      if (Payload != NULL && JsonStrLen > 0) {
+        EFI_UDP4_SESSION_DATA *Sess = AllocateZeroPool(sizeof(EFI_UDP4_SESSION_DATA));
+        if (Sess != NULL) {
+          Sess->DestinationAddress = RxData->UdpSession.SourceAddress;
+          Sess->DestinationPort    = RxData->UdpSession.SourcePort;
+          Sess->SourceAddress      = Socket->NicIp;
+          Sess->SourcePort         = OKN_STATION_UDP_PORT;
+
+#ifdef OKN_UDP_DBG
+          Print(L"[OKN_TX_SESS] dst=");
+          OknPrintIpv4A(Sess->DestinationAddress);
+          Print(L":%u  src=", (UINTN)Sess->DestinationPort);
+          OknPrintIpv4A(Sess->SourceAddress);
+          Print(L":%u\n", (UINTN)Sess->SourcePort);
+#endif  // OKN_UDP_DBG
+
+          EFI_UDP4_TRANSMIT_DATA *TxData = gOknUdpSocketTransmit->TokenTransmit.Packet.TxData;
+          ZeroMem(TxData, sizeof(EFI_UDP4_TRANSMIT_DATA));
+          TxData->UdpSessionData                  = Sess;
+          TxData->DataLength                      = JsonStrLen;
+          TxData->FragmentCount                   = 1;
+          TxData->FragmentTable[0].FragmentLength = JsonStrLen;
+          TxData->FragmentTable[0].FragmentBuffer = Payload;
+
+          // 记录待释放资源, TX 完成回调释放
+          gOknUdpSocketTransmit->TxPayload    = Payload;
+          gOknUdpSocketTransmit->TxSession    = Sess;
+          gOknUdpSocketTransmit->TxInProgress = TRUE;
+
+          Status =
+              gOknUdpSocketTransmit->Udp4->Transmit(gOknUdpSocketTransmit->Udp4, &gOknUdpSocketTransmit->TokenTransmit);
+          Print(L"[OKN_TX] Transmit() -> %r\n", Status);
+          if (TRUE == EFI_ERROR(Status)) {
+            Print(L"[OKN_TX_ERR] TxData=%p Payload=%p Sess=%p\n",
+                  gOknUdpSocketTransmit->TokenTransmit.Packet.TxData,
+                  Payload,
+                  Sess);
+            // 发送失败: 立即释放并复位
+            gOknUdpSocketTransmit->TxInProgress = FALSE;
+            if (gOknUdpSocketTransmit->TxPayload) {
+              FreePool(gOknUdpSocketTransmit->TxPayload);
+              gOknUdpSocketTransmit->TxPayload = NULL;
+            }
+            if (gOknUdpSocketTransmit->TxSession) {
+              FreePool(gOknUdpSocketTransmit->TxSession);
+              gOknUdpSocketTransmit->TxSession = NULL;
+            }
+          }
+        }
+        else {
+          FreePool(Payload);
+        }
+      }
+      else {
+        if (Payload)
+          FreePool(Payload);
+      }
+    }
+
+    cJSON_Delete(Tree);
+  }
+
+  // 11) 回收 RxData 并重新投递 Receive
+  gBS->SignalEvent(RxData->RecycleSignal);
+  Socket->TokenReceive.Packet.RxData = NULL;
+  Socket->Udp4->Receive(Socket->Udp4, &Socket->TokenReceive);
+
+  return;
+}
+
+// TX 完成后释放本次发送申请的内存, 避免泄漏
+VOID EFIAPI OknUdp4TxFreeHandler(IN EFI_EVENT Event, IN VOID *Context)
+{
+  UDP4_SOCKET *Sock = (UDP4_SOCKET *)Context;
+  if (NULL == Sock) {
+    return;
+  }
+
+#ifdef OKN_UDP_DBG
+  Print(L"[OKN_TX_DONE] status=%r payload=%p sess=%p\n", Sock->TokenTransmit.Status, Sock->TxPayload, Sock->TxSession);
+#endif  // OKN_UDP_DBG
+
+  // 释放本次发送的 Payload(我们在 ReceiveHandler 里用 AllocateCopyPool 分配)
+  if (Sock->TxPayload != NULL) {
+    FreePool(Sock->TxPayload);
+    Sock->TxPayload = NULL;
+  }
+
+  // 释放本次发送的 SessionData
+  if (Sock->TxSession != NULL) {
+    FreePool(Sock->TxSession);
+    Sock->TxSession = NULL;
+  }
+
+  Sock->TxInProgress = FALSE;
+}
+
+VOID EFIAPI OknUdp4NullHandler(IN EFI_EVENT Event, IN VOID *Context)
+{
+  return;
 }
 
 EFI_STATUS OknCreateUdp4SocketByServiceBindingHandle(IN EFI_HANDLE            Udp4ServiceBindingHandle,
@@ -341,213 +610,6 @@ EFI_STATUS OknStartUdp4ReceiveOnAllNics(IN EFI_UDP4_CONFIG_DATA *RxCfg)
   return (gOknUdpRxSocketCount > 0) ? EFI_SUCCESS : EFI_NOT_FOUND;
 }
 
-VOID EFIAPI OknUdp4ReceiveHandler(IN EFI_EVENT Event, IN VOID *Context)
-{
-  EFI_STATUS             Status;
-  UDP4_SOCKET           *Socket;
-  EFI_UDP4_RECEIVE_DATA *RxData;
-
-  Socket = (UDP4_SOCKET *)Context;
-  if (NULL == Socket || NULL == Socket->Udp4) {
-    Print(L"[OKN_UDP_ERROR] Socket or Socket->Udp4 is NULL.\n");
-    return;
-  }
-
-  RxData = Socket->TokenReceive.Packet.RxData;
-
-  // 1) Token 完成但没有数据: 按 UEFI UDP4 约定, 重新投递 Receive()
-  if (NULL == RxData) {
-    Print(L"[OKN_UDP_WARNING] RxData is NULL, Status=%r\n", Socket->TokenReceive.Status);
-    Socket->TokenReceive.Packet.RxData = NULL;
-    Status                             = Socket->Udp4->Receive(Socket->Udp4, &Socket->TokenReceive);
-    Print(L"[OKN_UDP_DEBUG] resubmit Receive: %r\n", Status);
-    return;
-  }
-
-  // 2) 若 Receive 被 Abort: 回收 RxData 并退出
-  if (EFI_ABORTED == Socket->TokenReceive.Status) {
-    Print(L"[OKN_UDP_WARNING] Socket TokenReceive Status is EFI_ABORTED\n");
-    gBS->SignalEvent(RxData->RecycleSignal);
-    Socket->TokenReceive.Packet.RxData = NULL;
-    return;
-  }
-
-  // 3) 空包: 回收并重新投递
-  if (0 == RxData->DataLength || 0 == RxData->FragmentCount || NULL == RxData->FragmentTable[0].FragmentBuffer ||
-      0 == RxData->FragmentTable[0].FragmentLength) {
-    gBS->SignalEvent(RxData->RecycleSignal);
-    Socket->TokenReceive.Packet.RxData = NULL;
-    Socket->Udp4->Receive(Socket->Udp4, &Socket->TokenReceive);
-    return;
-  }
-
-  // 4) 首包绑定: 选择第一个收到包的 NIC, 其它 RX socket 全部禁用
-  if (NULL == gOknUdpRxActiveSocket) {
-    gOknUdpRxActiveSocket   = Socket;
-    gOknUdpRxActiveSbHandle = Socket->ServiceBindingHandle;
-
-    for (UINTN i = 0; i < gOknUdpRxSocketCount; i++) {
-      if (gOknUdpRxSockets[i] != NULL && gOknUdpRxSockets[i] != Socket) {
-        OknDisableUdpRxSocket(gOknUdpRxSockets[i]);
-      }
-    }
-  }
-
-  // 5) 非选中 NIC 上来的包直接丢弃(但要回收 RxData)
-  if (Socket != gOknUdpRxActiveSocket) {
-    gBS->SignalEvent(RxData->RecycleSignal);
-    Socket->TokenReceive.Packet.RxData = NULL;
-    return;
-  }
-
-  // 6) 懒创建 TX socket: 只创建一次, 绑定到选中的 SB handle
-  //    注意: NotifyTransmit 改为 OknUdp4TxFreeHandler, 用于释放本次发送的内存
-  if (NULL == gOknUdpSocketTransmit && gOknUdpRxActiveSbHandle != NULL) {
-    EFI_UDP4_CONFIG_DATA TxCfg = {
-        TRUE,                  // AcceptBroadcast
-        FALSE,                 // AcceptPromiscuous
-        FALSE,                 // AcceptAnyPort
-        TRUE,                  // AllowDuplicatePort
-        0,                     // TypeOfService
-        16,                    // TimeToLive
-        TRUE,                  // DoNotFragment
-        0,                     // ReceiveTimeout
-        0,                     // TransmitTimeout
-        TRUE,                  // UseDefaultAddress
-        {{0, 0, 0, 0}},        // StationAddress
-        {{0, 0, 0, 0}},        // SubnetMask
-        OKN_STATION_UDP_PORT,  // StationPort
-        {{0, 0, 0, 0}},        // RemoteAddress (unused when using UdpSessionData)
-        0,                     // RemotePort    (unused when using UdpSessionData)
-    };
-
-    EFI_STATUS TxStatus;
-
-    TxStatus = OknCreateUdp4SocketByServiceBindingHandle(gOknUdpRxActiveSbHandle,
-                                                         &TxCfg,
-                                                         OknUdp4NullHandler,    // Tx socket 不需要 Receive 回调
-                                                         OknUdp4TxFreeHandler,  // TX 完成释放资源: OknUdp4TxFreeHandler
-                                                         &gOknUdpSocketTransmit);
-
-    if (TRUE == EFI_ERROR(TxStatus)) {
-      Print(L"[OKN_UDP_ERROR] Create TX socket failed: %r\n", TxStatus);
-      gOknUdpSocketTransmit = NULL;
-    }
-    else {
-      // 初始化 TX 内存追踪字段(需要你在 UDP4_SOCKET 结构体中加入这些字段)
-      gOknUdpSocketTransmit->TxPayload    = NULL;
-      gOknUdpSocketTransmit->TxSession    = NULL;
-      gOknUdpSocketTransmit->TxInProgress = FALSE;
-    }
-  }
-
-  if (NULL == gOknUdpSocketTransmit) {
-    Print(L"[OKN_UDP_ERROR] Create TX socket Success, but is NULL??!!\n");
-    gBS->SignalEvent(RxData->RecycleSignal);
-    Socket->TokenReceive.Packet.RxData = NULL;
-    Socket->Udp4->Receive(Socket->Udp4, &Socket->TokenReceive);
-    return;
-  }
-
-  // 7) 若上一次发送还未完成(Token 仍挂起), 为避免覆盖 Token/内存, 直接丢弃本次回复
-  if (gOknUdpSocketTransmit->TxInProgress) {
-    gBS->SignalEvent(RxData->RecycleSignal);
-    Socket->TokenReceive.Packet.RxData = NULL;
-    Socket->Udp4->Receive(Socket->Udp4, &Socket->TokenReceive);
-    return;
-  }
-
-  // 8) 解析 JSON
-  cJSON *Tree = cJSON_ParseWithLength((CONST CHAR8 *)RxData->FragmentTable[0].FragmentBuffer,
-                                      RxData->FragmentTable[0].FragmentLength);
-
-  if (Tree != NULL) {
-    // 9) 设置 JsonHandler 上下文: 确保 areyouok 填的是“当前 NIC”的 MAC/IP
-    gOknJsonCtxSocket = Socket;
-    OknMT_DispatchJsonCmd(gOknMtProtoPtr, Tree, &gOknTestReset);
-    gOknJsonCtxSocket = NULL;
-
-    // 10) 生成响应 JSON(cJSON_PrintUnformatted 返回需要 cJSON_free 的内存)
-    CHAR8 *JsonStr = cJSON_PrintUnformatted(Tree);
-    if (JsonStr != NULL) {
-      UINT32 JsonStrLen = (UINT32)AsciiStrLen(JsonStr);
-
-      // 关键: Transmit 是异步的, 不能直接把 JsonStr 指针塞给 TxData 再立刻释放
-      // 所以这里复制一份到 Pool, TX 完成回调里释放
-      VOID *Payload = AllocateCopyPool(JsonStrLen, JsonStr);
-      cJSON_free(JsonStr);
-
-      if (Payload != NULL && JsonStrLen > 0) {
-        EFI_UDP4_SESSION_DATA *Sess = AllocateZeroPool(sizeof(EFI_UDP4_SESSION_DATA));
-        if (Sess != NULL) {
-          Sess->DestinationAddress = RxData->UdpSession.SourceAddress;
-          Sess->DestinationPort    = RxData->UdpSession.SourcePort;
-          Sess->SourcePort         = OKN_STATION_UDP_PORT;
-          // 可选: 如果你在 Socket 里保存了 DHCP IP, 可把源地址也填上
-          // Sess->SourceAddress = Socket->NicIp;
-
-          EFI_UDP4_TRANSMIT_DATA *TxData = gOknUdpSocketTransmit->TokenTransmit.Packet.TxData;
-          ZeroMem(TxData, sizeof(EFI_UDP4_TRANSMIT_DATA));
-          TxData->UdpSessionData                  = Sess;
-          TxData->DataLength                      = JsonStrLen;
-          TxData->FragmentCount                   = 1;
-          TxData->FragmentTable[0].FragmentLength = JsonStrLen;
-          TxData->FragmentTable[0].FragmentBuffer = Payload;
-
-          // 记录待释放资源, TX 完成回调释放
-          gOknUdpSocketTransmit->TxPayload    = Payload;
-          gOknUdpSocketTransmit->TxSession    = Sess;
-          gOknUdpSocketTransmit->TxInProgress = TRUE;
-
-          Status =
-              gOknUdpSocketTransmit->Udp4->Transmit(gOknUdpSocketTransmit->Udp4, &gOknUdpSocketTransmit->TokenTransmit);
-          if (TRUE == EFI_ERROR(Status)) {
-            // 发送失败: 立即释放并复位
-            gOknUdpSocketTransmit->TxInProgress = FALSE;
-            if (gOknUdpSocketTransmit->TxPayload) {
-              FreePool(gOknUdpSocketTransmit->TxPayload);
-              gOknUdpSocketTransmit->TxPayload = NULL;
-            }
-            if (gOknUdpSocketTransmit->TxSession) {
-              FreePool(gOknUdpSocketTransmit->TxSession);
-              gOknUdpSocketTransmit->TxSession = NULL;
-            }
-          }
-        }
-        else {
-          FreePool(Payload);
-        }
-      }
-      else {
-        if (Payload)
-          FreePool(Payload);
-      }
-    }
-
-    cJSON_Delete(Tree);
-  }
-
-  // 11) 回收 RxData 并重新投递 Receive
-  gBS->SignalEvent(RxData->RecycleSignal);
-  Socket->TokenReceive.Packet.RxData = NULL;
-  Socket->Udp4->Receive(Socket->Udp4, &Socket->TokenReceive);
-
-  return;
-}
-
-VOID OknPollAllUdpSockets(VOID)
-{
-  for (UINTN i = 0; i < gOknUdpRxSocketCount; ++i) {
-    if (gOknUdpRxSockets[i] != NULL && gOknUdpRxSockets[i]->Udp4 != NULL) {
-      gOknUdpRxSockets[i]->Udp4->Poll(gOknUdpRxSockets[i]->Udp4);
-    }
-  }
-
-  if (gOknUdpSocketTransmit != NULL && gOknUdpSocketTransmit->Udp4 != NULL) {
-    gOknUdpSocketTransmit->Udp4->Poll(gOknUdpSocketTransmit->Udp4);
-  }
-}
-
 EFI_STATUS OknWaitForUdpNicBind(UINTN TimeoutMs)
 {
   UINTN Elapsed = 0;
@@ -574,22 +636,6 @@ EFI_STATUS OknWaitForUdpNicBind(UINTN TimeoutMs)
 
   Print(L"[OKN_UDP] Wait for Udp Nic bind DONE, Active=%p\n", gOknUdpRxActiveSocket);
   return EFI_SUCCESS;
-}
-
-UINTN OknCountHandlesByProtocol(IN EFI_GUID *Guid)
-{
-  EFI_STATUS  Status;
-  EFI_HANDLE *Handles = NULL;
-  UINTN       Count   = 0;
-
-  Status = gBS->LocateHandleBuffer(ByProtocol, Guid, NULL, &Count, &Handles);
-  if (!EFI_ERROR(Status) && Handles != NULL) {
-    FreePool(Handles);
-  }
-  else {
-    Count = 0;
-  }
-  return Count;
 }
 
 VOID OknDumpNetProtoCounts(VOID)
@@ -629,14 +675,107 @@ VOID OknConnectAllSnpControllers(VOID)
   return;
 }
 
-BOOLEAN OknIsZeroIp4(IN EFI_IPv4_ADDRESS *A)
+/**
+ * 这个函数暂时不知道有啥用, 待删除
+ */
+EFI_STATUS OknAsciiUdp4Write(IN UDP4_SOCKET *Socket, IN CONST CHAR8 *FormatString, ...)
+{
+  VA_LIST Marker;
+  UINT32  NumberOfPrinted;
+
+  if (NULL == Socket) {
+    return EFI_NOT_FOUND;
+  }
+
+  VA_START(Marker, FormatString);
+  NumberOfPrinted = (UINT32)AsciiVSPrint(sStartOfBuffer, MAX_UDP4_FRAGMENT_LENGTH, FormatString, Marker);
+  VA_END(Marker);
+
+  EFI_UDP4_TRANSMIT_DATA *TxData = Socket->TokenTransmit.Packet.TxData;
+  ZeroMem(TxData, sizeof(EFI_UDP4_TRANSMIT_DATA));
+  TxData->DataLength                      = NumberOfPrinted;
+  TxData->FragmentCount                   = 1;
+  TxData->FragmentTable[0].FragmentLength = NumberOfPrinted;
+  TxData->FragmentTable[0].FragmentBuffer = sStartOfBuffer;
+  return Socket->Udp4->Transmit(Socket->Udp4, &Socket->TokenTransmit);
+}
+
+/**************************************************************************************************/
+STATIC VOID OknPrintMac(IN CONST EFI_MAC_ADDRESS *Mac, IN UINT32 HwAddrSize)
+{
+  for (UINT32 i = 0; i < HwAddrSize; i++) {
+    Print(L"%02x", (UINTN)Mac->Addr[i]);
+    if (i + 1 < HwAddrSize)
+      Print(L":");
+  }
+}
+
+STATIC VOID OknPrintIpv4A(IN CONST EFI_IPv4_ADDRESS Ip)
+{
+  Print(L"%d.%d.%d.%d", Ip.Addr[0], Ip.Addr[1], Ip.Addr[2], Ip.Addr[3]);
+}
+
+STATIC VOID OknDumpAsciiN(IN CONST VOID *Buf, IN UINTN Len, IN UINTN Max)
+{
+  CONST UINT8 *p = (CONST UINT8 *)Buf;
+  UINTN        n = (Len < Max) ? Len : Max;
+  for (UINTN i = 0; i < n; i++) {
+    UINT8 c = p[i];
+    if (c >= 0x20 && c <= 0x7E) {
+      Print(L"%c", c);
+    }
+    else {
+      Print(L".");
+    }
+  }
+}
+
+STATIC VOID OknDisableUdpRxSocket(IN UDP4_SOCKET *Sock)
+{
+  if (NULL == Sock || NULL == Sock->Udp4) {
+    return;
+  }
+  // Cancel the pending receive token to stop further callbacks.
+  Sock->Udp4->Cancel(Sock->Udp4, &Sock->TokenReceive);
+}
+
+STATIC UINTN OknCountHandlesByProtocol(IN EFI_GUID *Guid)
+{
+  EFI_STATUS  Status;
+  EFI_HANDLE *Handles = NULL;
+  UINTN       Count   = 0;
+
+  Status = gBS->LocateHandleBuffer(ByProtocol, Guid, NULL, &Count, &Handles);
+  if (!EFI_ERROR(Status) && Handles != NULL) {
+    FreePool(Handles);
+  }
+  else {
+    Count = 0;
+  }
+  return Count;
+}
+
+STATIC VOID OknPollAllUdpSockets(VOID)
+{
+  for (UINTN i = 0; i < gOknUdpRxSocketCount; ++i) {
+    if (gOknUdpRxSockets[i] != NULL && gOknUdpRxSockets[i]->Udp4 != NULL) {
+      gOknUdpRxSockets[i]->Udp4->Poll(gOknUdpRxSockets[i]->Udp4);
+    }
+  }
+
+  if (gOknUdpSocketTransmit != NULL && gOknUdpSocketTransmit->Udp4 != NULL) {
+    gOknUdpSocketTransmit->Udp4->Poll(gOknUdpSocketTransmit->Udp4);
+  }
+}
+
+STATIC BOOLEAN OknIsZeroIp4(IN EFI_IPv4_ADDRESS *A)
 {
   // UEFI 环境里 ASSERT 的收益很高; 能把"上游传错指针"这种问题提前暴露, 而不是拖到很后面才炸
   ASSERT(A != NULL);
   return (A->Addr[0] == 0 && A->Addr[1] == 0 && A->Addr[2] == 0 && A->Addr[3] == 0);
 }
 
-EFI_STATUS OknEnsureDhcpIp4Ready(EFI_HANDLE Handle, UINTN TimeoutMs, EFI_IPv4_ADDRESS *OutIp)
+STATIC EFI_STATUS OknEnsureDhcpIp4Ready(EFI_HANDLE Handle, UINTN TimeoutMs, EFI_IPv4_ADDRESS *OutIp)
 {
   EFI_STATUS                      Status;
   EFI_IP4_CONFIG2_PROTOCOL       *Ip4Cfg2 = NULL;
@@ -702,78 +841,4 @@ EFI_STATUS OknEnsureDhcpIp4Ready(EFI_HANDLE Handle, UINTN TimeoutMs, EFI_IPv4_AD
 
   Print(L"[OKN_UDP_WARNING]  DHCP timeout (%u ms)\n", (UINT32)TimeoutMs);
   return EFI_TIMEOUT;
-}
-
-// TX 完成后释放本次发送申请的内存, 避免泄漏
-VOID EFIAPI OknUdp4TxFreeHandler(IN EFI_EVENT Event, IN VOID *Context)
-{
-  UDP4_SOCKET *Sock = (UDP4_SOCKET *)Context;
-  if (NULL == Sock) {
-    return;
-  }
-
-  // 释放本次发送的 Payload(我们在 ReceiveHandler 里用 AllocateCopyPool 分配)
-  if (Sock->TxPayload != NULL) {
-    FreePool(Sock->TxPayload);
-    Sock->TxPayload = NULL;
-  }
-
-  // 释放本次发送的 SessionData
-  if (Sock->TxSession != NULL) {
-    FreePool(Sock->TxSession);
-    Sock->TxSession = NULL;
-  }
-
-  Sock->TxInProgress = FALSE;
-}
-
-VOID EFIAPI OknUdp4NullHandler(IN EFI_EVENT Event, IN VOID *Context)
-{
-  return;
-}
-
-EFI_STATUS OknAsciiUdp4Write(IN UDP4_SOCKET *Socket, IN CONST CHAR8 *FormatString, ...)
-{
-  VA_LIST Marker;
-  UINT32  NumberOfPrinted;
-
-  if (NULL == Socket) {
-    return EFI_NOT_FOUND;
-  }
-
-  VA_START(Marker, FormatString);
-  NumberOfPrinted = (UINT32)AsciiVSPrint(sStartOfBuffer, MAX_UDP4_FRAGMENT_LENGTH, FormatString, Marker);
-  VA_END(Marker);
-
-  EFI_UDP4_TRANSMIT_DATA *TxData = Socket->TokenTransmit.Packet.TxData;
-  ZeroMem(TxData, sizeof(EFI_UDP4_TRANSMIT_DATA));
-  TxData->DataLength                      = NumberOfPrinted;
-  TxData->FragmentCount                   = 1;
-  TxData->FragmentTable[0].FragmentLength = NumberOfPrinted;
-  TxData->FragmentTable[0].FragmentBuffer = sStartOfBuffer;
-  return Socket->Udp4->Transmit(Socket->Udp4, &Socket->TokenTransmit);
-}
-
-/**************************************************************************************************/
-STATIC VOID OknPrintMac(IN CONST EFI_MAC_ADDRESS *Mac, IN UINT32 HwAddrSize)
-{
-  for (UINT32 i = 0; i < HwAddrSize; i++) {
-    Print(L"%02x", (UINTN)Mac->Addr[i]);
-    if (i + 1 < HwAddrSize)
-      Print(L":");
-  }
-}
-
-STATIC VOID OknPrintIpv4A(IN CONST EFI_IPv4_ADDRESS *Ip)
-{
-  Print(L"%u.%u.%u.%u", (UINTN)Ip->Addr[0], (UINTN)Ip->Addr[1], (UINTN)Ip->Addr[2], (UINTN)Ip->Addr[3]);
-}
-
-STATIC VOID OknDisableUdpRxSocket(IN UDP4_SOCKET *Sock)
-{
-  if (NULL == Sock || NULL == Sock->Udp4) {
-    return;
-  }
-  // Cancel the pending receive token to stop further callbacks.
-  Sock->Udp4->Cancel(Sock->Udp4, &Sock->TokenReceive);
 }
