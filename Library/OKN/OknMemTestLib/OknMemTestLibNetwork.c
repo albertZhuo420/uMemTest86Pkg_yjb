@@ -17,7 +17,7 @@
  *    └─ UDP4 Tx (gOknUdpSocketTransmit->Transmit) -> 回发给上位机
  */
 
- #define CMD_ENTRY(_name, _handler) {(_name), (_handler)}
+#define CMD_ENTRY(_name, _handler) {(_name), (_handler)}
 
 extern struct {
   UINT32 CurPattern[4];
@@ -194,52 +194,62 @@ STATIC EFI_STATUS OknMT_SmbiosGetOptionalStringByIndex(IN CONST CHAR8   *Optiona
 
 STATIC EFI_STATUS OknMT_ProcessJsonCmd_SetAmtConfig(OKN_MT_CMD_CTX *Ctx)
 {
+  Print(L"| = %a = |\n", __FUNCTION__);
   return Cmd_SetAmtConfig(Ctx->Proto, Ctx->Tree);
 }
 
 STATIC EFI_STATUS OknMT_ProcessJsonCmd_MT86Status(OKN_MT_CMD_CTX *Ctx)
 {
+  Print(L"| = %a = |\n", __FUNCTION__);
   return Cmd_MT86Status(Ctx->Tree);
 }
 
 STATIC EFI_STATUS OknMT_ProcessJsonCmd_MT86Abort(OKN_MT_CMD_CTX *Ctx)
 {
+  Print(L"| = %a = |\n", __FUNCTION__);
   Cmd_MT86Abort();
   return EFI_SUCCESS;
 }
 
 STATIC EFI_STATUS OknMT_ProcessJsonCmd_MT86Start(OKN_MT_CMD_CTX *Ctx)
 {
+  Print(L"| = %a = |\n", __FUNCTION__);
   return Cmd_MT86Start(Ctx->Tree);
 }
 
 STATIC EFI_STATUS OknMT_ProcessJsonCmd_Reply9527(OKN_MT_CMD_CTX *Ctx)
 {
+  Print(L"| = %a = |\n", __FUNCTION__);
   return Cmd_Reply9527(Ctx->Tree);
 }
 
 STATIC EFI_STATUS OknMT_ProcessJsonCmd_HwInfo(OKN_MT_CMD_CTX *Ctx)
 {
+  Print(L"| = %a = |\n", __FUNCTION__);
   return Cmd_HwInfo(Ctx->Proto, Ctx->Tree);
 }
 
 STATIC EFI_STATUS OknMT_ProcessJsonCmd_ReadSPD(OKN_MT_CMD_CTX *Ctx)
 {
+  Print(L"| = %a = |\n", __FUNCTION__);
   return Cmd_ReadSPD(Ctx->Proto, Ctx->Tree);
 }
 
 STATIC EFI_STATUS OknMT_ProcessJsonCmd_GetMemConfig(OKN_MT_CMD_CTX *Ctx)
 {
+  Print(L"| = %a = |\n", __FUNCTION__);
   return Cmd_GetMemConfig(Ctx->Proto, Ctx->Tree);
 }
 
 STATIC EFI_STATUS OknMT_ProcessJsonCmd_GetMemConfigReal(OKN_MT_CMD_CTX *Ctx)
 {
+  Print(L"| = %a = |\n", __FUNCTION__);
   return Cmd_GetMemConfigReal(Ctx->Proto, Ctx->Tree);
 }
 
 STATIC EFI_STATUS OknMT_ProcessJsonCmd_SetMemConfig(OKN_MT_CMD_CTX *Ctx)
 {
+  Print(L"| = %a = |\n", __FUNCTION__);
   return Cmd_SetMemConfig(Ctx->Proto, Ctx->Tree);
 }
 
@@ -247,6 +257,8 @@ STATIC EFI_STATUS OknMT_ProcessJsonCmd_ResetSystem(OKN_MT_CMD_CTX *Ctx)
 {
   EFI_STATUS     Status;
   EFI_RESET_TYPE Rt = EfiResetCold;
+
+  Print(L"| = %a = |\n", __FUNCTION__);
 
   Status = Cmd_ResetSystem(Ctx->Tree, &Rt);
   if (FALSE == EFI_ERROR(Status)) {
@@ -294,10 +306,10 @@ STATIC EFI_STATUS Cmd_MT86Status(OUT cJSON *pJsTree)
   cJSON_AddNumberToObject(pJsTree, "UncorrError", MtSupportGetNumUncorrECCErrors());
   cJSON_AddNumberToObject(pJsTree, "UnknownSlotError", MtSupportGetNumUnknownSlotErrors());
 
-  cJSON                       *ErrorInfo = cJSON_AddArrayToObject(pJsTree, "ERRORINFO");
-  OKN_DIMM_ADDRESS_DETAIL_PLUS Item;
+  cJSON                  *ErrorInfo = cJSON_AddArrayToObject(pJsTree, "ERRORINFO");
+  OKN_DIMM_ADDRESS_DETAIL Item;
   for (UINT8 i = 0; i < 4; i++) {
-    ZeroMem(&Item, sizeof(OKN_DIMM_ADDRESS_DETAIL_PLUS));
+    ZeroMem(&Item, sizeof(OKN_DIMM_ADDRESS_DETAIL));
 
     Status = OknMT_DequeueErrorCopy(&gOknDimmErrorQueue, &Item);
     if (EFI_NOT_FOUND == Status) {
@@ -487,12 +499,16 @@ STATIC EFI_STATUS Cmd_HwInfo(IN OKN_MEMORY_TEST_PROTOCOL *pProto, OUT cJSON *pJs
     }
   } while (0);
 
-  // 3. SLOT_CNT
+  /**
+   * 3. SLOT_CNT
+   * 通过 E_MEMORY_DEVICE 来获取, 全局搜
+   */
   cJSON_AddNumberToObject(pJsTree, "SMBIOS_MEM_DEV_CNT", g_numSMBIOSMem);
 
   // 4. 获取DIMM信息
   cJSON *DimmInfoArray = cJSON_AddArrayToObject(pJsTree, "DIMM_INFO");
-  for (UINT8 i = 0; i < g_numSMBIOSMem; i++) {
+  INT32  NumSMBIOSMem  = (OKN_MAX_DIMM_CNT == g_numSMBIOSMem) ? g_numSMBIOSMem : OKN_MAX_DIMM_CNT;
+  for (UINT8 i = 0; i < NumSMBIOSMem; i++) {
     cJSON *Info = cJSON_CreateObject();
 
     UINT8 Socket  = i / 8;
@@ -511,13 +527,21 @@ STATIC EFI_STATUS Cmd_HwInfo(IN OKN_MEMORY_TEST_PROTOCOL *pProto, OUT cJSON *pJs
     INT32                    EccPkgCnt     = OKN_MAGIC_NUMBER;  // ECC Chip Count
 
     Status = pProto->IsDimmPresent(Socket, Channel, Dimm, &RamPresent);
+    Print(L"[OKN_PROTO] N%u:C%u:D%u - IsDimmPresent(): %r\n", Socket, Channel, Dimm, Status);
+
     if (FALSE == EFI_ERROR(Status)) {  // 在线
       Online = RamPresent ? 1 : 0;
       if (TRUE == RamPresent) {
         // 读取温度
         Status = pProto->GetDimmTemp(Socket, Channel, Dimm, (UINT8 *)&RamTemp0, (UINT8 *)&RamTemp1, (UINT8 *)&HubTemp);
+        if (TRUE == EFI_ERROR(Status)) {
+          Print(L"[OKN_PROTO_ERROR] N%u:C%u:D%u - GetDimmTemp(): %r\n", Socket, Channel, Dimm, Status);
+        }
         // 读取 MAP_OUT_REASON
         Status = pProto->GetDisReason(Socket, Channel, Dimm, &MapOutReason);
+        if (TRUE == EFI_ERROR(Status)) {
+          Print(L"[OKN_PROTO_ERROR] N%u:C%u:D%u - GetDisReason(): %r\n", Socket, Channel, Dimm, Status);
+        }
         // 读取 SPD 数据: SdramDevWidth / PkgRanksCnt / SdramPkgCnt / EccPkgCnt
         UINT8 SpdData[1024] = {0};
         INTN  SpdReadLen    = 0;
@@ -531,7 +555,7 @@ STATIC EFI_STATUS Cmd_HwInfo(IN OKN_MEMORY_TEST_PROTOCOL *pProto, OUT cJSON *pJs
             OknDdr4SpdEstimateTotalEccPackages(SpdData, DDR4_SPD_LEN, (UINT16 *)&EccPkgCnt);
           }
           else {
-            Print(L"[OKN_UEFI_WARN] [%s] SpdRead() Len is %d, NOT %d\n", __func__, SpdReadLen, DDR4_SPD_LEN);
+            Print(L"[OKN_PROTO_ERROR] N%u:C%u:D%u - SpdRead(): %r\n", Socket, Channel, Dimm, Status);
           }
         }
         else {
