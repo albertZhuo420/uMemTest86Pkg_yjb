@@ -71,13 +71,9 @@ EFI_STATUS OknCreateUdp4SocketByServiceBindingHandle(IN EFI_HANDLE            Ud
                                                      OUT UDP4_SOCKET        **Socket);
 EFI_STATUS OknCloseUdp4Socket(IN UDP4_SOCKET *Socket);
 EFI_STATUS OknStartUdp4ReceiveOnAllNics(IN EFI_UDP4_CONFIG_DATA *RxCfg);
-VOID       OknPollAllUdpSockets(VOID);
 EFI_STATUS OknWaitForUdpNicBind(UINTN TimeoutMs);
-UINTN      OknCountHandlesByProtocol(IN EFI_GUID *Guid);
 VOID       OknDumpNetProtoCounts(VOID);
 VOID       OknConnectAllSnpControllers(VOID);
-BOOLEAN    OknIsZeroIp4(IN EFI_IPv4_ADDRESS *A);
-EFI_STATUS OknEnsureDhcpIp4Ready(EFI_HANDLE Handle, UINTN TimeoutMs, EFI_IPv4_ADDRESS *OutIp);
 EFI_STATUS OknAsciiUdp4Write(IN UDP4_SOCKET *Socket, IN CONST CHAR8 *FormatString, ...);
 
 #endif  // _OKN_UDP4_SOCKET_LIB_H_
