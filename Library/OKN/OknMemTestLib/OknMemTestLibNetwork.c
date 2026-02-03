@@ -502,8 +502,8 @@ STATIC EFI_STATUS Cmd_HwInfo(IN OKN_MEMORY_TEST_PROTOCOL *pProto, OUT cJSON *pJs
     BOOLEAN                  RamPresent    = FALSE;
     UINT8                    Online        = 0;
     INT32                    RamTemp0      = OKN_MAGIC_NUMBER;
-    INT32                    RamTemp1      = 0;
-    INT32                    HubTemp       = 0;
+    INT8                     RamTemp1      = 0;
+    INT8                     HubTemp       = 0;
     DIMM_RANK_MAP_OUT_REASON MapOutReason  = DimmRankMapOutMax;
     INT32                    SdramDevWidth = OKN_MAGIC_NUMBER;  // SDRAM Device Width
     INT32                    PkgRanksCnt   = OKN_MAGIC_NUMBER;  // Number of Package Ranks per DIMM

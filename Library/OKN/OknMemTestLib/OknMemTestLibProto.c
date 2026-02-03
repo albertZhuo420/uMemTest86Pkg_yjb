@@ -84,7 +84,7 @@ EFI_STATUS OknMT_SetMemConfig(IN OKN_MEMORY_TEST_PROTOCOL *pProto, IN CONST cJSO
 {
   EFI_STATUS Status = EFI_SUCCESS;
 
-  if (NULL == pProto) {
+  if (NULL == pProto || NULL == pJsTree) {
     return EFI_INVALID_PARAMETER;
   }
   if (NULL == pProto->SetMemConfig) {
@@ -97,6 +97,13 @@ EFI_STATUS OknMT_SetMemConfig(IN OKN_MEMORY_TEST_PROTOCOL *pProto, IN CONST cJSO
   Status = OknMT_GetMemCfgFromJson(pJsTree, &Cfg);
   if (TRUE == EFI_ERROR(Status)) {
     Print(L"[OKN_UEFI_ERR] OknMT_GetMemCfgFromJson failed: %r\n", Status);
+    return Status;
+  }
+
+  Status = pProto->SetMemConfig(&Cfg);
+  if (TRUE == EFI_ERROR(Status)) {
+    Print(L"[OKN_UEFI_ERR] Protocol SetMemConfig failed: %r\n", Status);
+    return Status;
   }
 
   return EFI_SUCCESS;

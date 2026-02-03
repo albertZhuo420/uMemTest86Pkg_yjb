@@ -2908,13 +2908,9 @@ UefiMain(
       (VOID)OknWaitForUdpNicBind(0);
     } 
     else {
-      // 保持原始语义：UDP 不可用才 skip waiting
-      // Preserve original semantics: only skip waiting when UDP init fails.
+      // 保持原样: UDP 不可用才 skip waiting
       gOKnSkipWaiting = TRUE;
     }
-
-    // TX socket will be created lazily in OknUdp4ReceiveHandler() after NIC binding.
-    gOknUdpSocketTransmit = NULL;
 
     if (gOKnSkipWaiting) {
       gAutoMode = TRUE;

@@ -56,7 +56,13 @@ extern UDP4_SOCKET *gOknUdpRxActiveSocket;
 extern EFI_HANDLE   gOknUdpRxActiveSbHandle;
 extern UDP4_SOCKET *gOknJsonCtxSocket;
 
+/**
+ * 下面的四个函数必须要有 EFIAPI, 包括函数的实现, 这是一个天坑
+ */
 RETURN_STATUS EFIAPI OknUdp4SocketLibConstructor(VOID);
+VOID EFIAPI          OknUdp4ReceiveHandler(IN EFI_EVENT Event, IN VOID *Context);
+VOID EFIAPI          OknUdp4TxFreeHandler(IN EFI_EVENT Event, IN VOID *Context);
+VOID EFIAPI          OknUdp4NullHandler(IN EFI_EVENT Event, IN VOID *Context);
 
 EFI_STATUS OknCreateUdp4SocketByServiceBindingHandle(IN EFI_HANDLE            Udp4ServiceBindingHandle,
                                                      IN EFI_UDP4_CONFIG_DATA *ConfigData,
@@ -65,7 +71,6 @@ EFI_STATUS OknCreateUdp4SocketByServiceBindingHandle(IN EFI_HANDLE            Ud
                                                      OUT UDP4_SOCKET        **Socket);
 EFI_STATUS OknCloseUdp4Socket(IN UDP4_SOCKET *Socket);
 EFI_STATUS OknStartUdp4ReceiveOnAllNics(IN EFI_UDP4_CONFIG_DATA *RxCfg);
-VOID       OknUdp4ReceiveHandler(IN EFI_EVENT Event, IN VOID *Context);
 VOID       OknPollAllUdpSockets(VOID);
 EFI_STATUS OknWaitForUdpNicBind(UINTN TimeoutMs);
 UINTN      OknCountHandlesByProtocol(IN EFI_GUID *Guid);
@@ -73,8 +78,6 @@ VOID       OknDumpNetProtoCounts(VOID);
 VOID       OknConnectAllSnpControllers(VOID);
 BOOLEAN    OknIsZeroIp4(IN EFI_IPv4_ADDRESS *A);
 EFI_STATUS OknEnsureDhcpIp4Ready(EFI_HANDLE Handle, UINTN TimeoutMs, EFI_IPv4_ADDRESS *OutIp);
-VOID       OknUdp4TxFreeHandler(IN EFI_EVENT Event, IN VOID *Context);
-VOID       OknUdp4NullHandler(IN EFI_EVENT Event, IN VOID *Context);
 EFI_STATUS OknAsciiUdp4Write(IN UDP4_SOCKET *Socket, IN CONST CHAR8 *FormatString, ...);
 
 #endif  // _OKN_UDP4_SOCKET_LIB_H_
