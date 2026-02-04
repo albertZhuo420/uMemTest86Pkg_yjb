@@ -31,7 +31,7 @@ typedef struct {
 
   // child + protocol
   EFI_HANDLE         ChildHandle;
-  EFI_UDP4_PROTOCOL *Udp4;
+  EFI_UDP4_PROTOCOL *Udp4Proto;
 
   // config + tokens
   EFI_UDP4_CONFIG_DATA      ConfigData;
@@ -47,14 +47,10 @@ typedef struct {
   VOID                  *TxPayload;
   EFI_UDP4_SESSION_DATA *TxSession;
   BOOLEAN                TxInProgress;
-} UDP4_SOCKET;
+} OKN_UDP4_ENDPOINT;
 
-extern UDP4_SOCKET *gOknUdpSocketTransmit;
-extern UDP4_SOCKET *gOknUdpRxSockets[MAX_UDP4_RX_SOCKETS];
-extern UINTN        gOknUdpRxSocketCount;
-extern UDP4_SOCKET *gOknUdpRxActiveSocket;
-extern EFI_HANDLE   gOknUdpRxActiveSbHandle;
-extern UDP4_SOCKET *gOknJsonCtxSocket;
+extern UINTN              gOknUdpEdpOnlineCnt;
+extern OKN_UDP4_ENDPOINT *gOknJsonCtxUdpEdp;
 
 /**
  * 下面的四个函数必须要有 EFIAPI, 包括函数的实现, 这是一个天坑
@@ -64,16 +60,9 @@ VOID EFIAPI          OknUdp4ReceiveHandler(IN EFI_EVENT Event, IN VOID *Context)
 VOID EFIAPI          OknUdp4TxFreeHandler(IN EFI_EVENT Event, IN VOID *Context);
 VOID EFIAPI          OknUdp4NullHandler(IN EFI_EVENT Event, IN VOID *Context);
 
-EFI_STATUS OknCreateUdp4SocketByServiceBindingHandle(IN EFI_HANDLE            Udp4ServiceBindingHandle,
-                                                     IN EFI_UDP4_CONFIG_DATA *ConfigData,
-                                                     IN EFI_EVENT_NOTIFY      NotifyReceive,
-                                                     IN EFI_EVENT_NOTIFY      NotifyTransmit,
-                                                     OUT UDP4_SOCKET        **Socket);
-EFI_STATUS OknCloseUdp4Socket(IN UDP4_SOCKET *Socket);
 EFI_STATUS OknStartUdp4ReceiveOnAllNics(IN EFI_UDP4_CONFIG_DATA *RxCfg);
 EFI_STATUS OknWaitForUdpNicBind(UINTN TimeoutMs);
 VOID       OknDumpNetProtoCounts(VOID);
 VOID       OknConnectAllSnpControllers(VOID);
-EFI_STATUS OknAsciiUdp4Write(IN UDP4_SOCKET *Socket, IN CONST CHAR8 *FormatString, ...);
 
 #endif  // _OKN_UDP4_SOCKET_LIB_H_

@@ -2900,7 +2900,7 @@ UefiMain(
     gBS->Stall(4000 * 1000);
 
     Status = OknStartUdp4ReceiveOnAllNics(&OknRxConfigData);
-    Print(L"[OKN_UDP] OknStartUdp4ReceiveOnAllNics: %r, RxSockCnt=%u\n", Status, gOknUdpRxSocketCount);
+    Print(L"[OKN_UDP] OknStartUdp4ReceiveOnAllNics: %r, RxSockCnt=%u\n", Status, gOknUdpEdpOnlineCnt);
     gBS->Stall(4 * 1000 * 1000);
     if (FALSE == EFI_ERROR(Status)) {
       gOKnSkipWaiting = FALSE;

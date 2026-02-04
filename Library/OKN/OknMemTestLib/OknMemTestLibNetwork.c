@@ -9,14 +9,6 @@
 #include <Library/OKN/OknUdp4SocketLib.h>
 #include <Protocol/Smbios.h>
 
-/**
- * UDP4 Rx (OknUdp4ReceiveHandler)
- *    ├─ cJSON_ParseWithLength(udp_payload)  -> Tree
- *    ├─ JsonHandler(Tree)                   -> 在 Tree 里加返回字段 / 改全局状态
- *    ├─ cJSON_PrintUnformatted(Tree)        -> JSON response string
- *    └─ UDP4 Tx (gOknUdpSocketTransmit->Transmit) -> 回发给上位机
- */
-
 #define CMD_ENTRY(_name, _handler) {(_name), (_handler)}
 
 extern struct {
@@ -409,26 +401,26 @@ STATIC EFI_STATUS Cmd_Reply9527(OUT cJSON *pJsTree)
   }
 
   // 关键: MAC/IP 来自"当前接收该包的 NIC"
-  if (gOknJsonCtxSocket != NULL) {
+  if (gOknJsonCtxUdpEdp != NULL) {
     AsciiSPrint(AsciiSPrintBuffer,
                 OKN_BUF_SIZE,
                 "%02x:%02x:%02x:%02x:%02x:%02x",
-                gOknJsonCtxSocket->NicMac[0],
-                gOknJsonCtxSocket->NicMac[1],
-                gOknJsonCtxSocket->NicMac[2],
-                gOknJsonCtxSocket->NicMac[3],
-                gOknJsonCtxSocket->NicMac[4],
-                gOknJsonCtxSocket->NicMac[5]);
+                gOknJsonCtxUdpEdp->NicMac[0],
+                gOknJsonCtxUdpEdp->NicMac[1],
+                gOknJsonCtxUdpEdp->NicMac[2],
+                gOknJsonCtxUdpEdp->NicMac[3],
+                gOknJsonCtxUdpEdp->NicMac[4],
+                gOknJsonCtxUdpEdp->NicMac[5]);
     cJSON_AddStringToObject(pJsTree, "MAC", AsciiSPrintBuffer);
 
-    if (gOknJsonCtxSocket->NicIpValid) {
+    if (gOknJsonCtxUdpEdp->NicIpValid) {
       AsciiSPrint(AsciiSPrintBuffer,
                   OKN_BUF_SIZE,
                   "%d.%d.%d.%d",
-                  gOknJsonCtxSocket->NicIp.Addr[0],
-                  gOknJsonCtxSocket->NicIp.Addr[1],
-                  gOknJsonCtxSocket->NicIp.Addr[2],
-                  gOknJsonCtxSocket->NicIp.Addr[3]);
+                  gOknJsonCtxUdpEdp->NicIp.Addr[0],
+                  gOknJsonCtxUdpEdp->NicIp.Addr[1],
+                  gOknJsonCtxUdpEdp->NicIp.Addr[2],
+                  gOknJsonCtxUdpEdp->NicIp.Addr[3]);
       cJSON_AddStringToObject(pJsTree, "IP", AsciiSPrintBuffer);
     }
   }
