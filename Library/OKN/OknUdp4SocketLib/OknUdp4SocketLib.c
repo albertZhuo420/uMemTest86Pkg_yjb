@@ -4,6 +4,14 @@
 
 #define OKN_UDP_DBG
 
+/**
+ * 以太网常见 MTU=1500(不含二层头), IPv4 + UDP 头共 28 字节: 
+ * 最大不分片 UDP payload ≈ 1500 - 20 - 8 = 1472
+ * 再留一点余量(VLAN tag、隧道、不同驱动/栈差异、某些环境 MTU 不是 1500), 工程上就常取 1400 或 1200. 
+ * 所以 1400 的意义是: 尽量保证"不走 IP 分片", 提高稳定性. 
+ */
+#define OKN_UDP_SAFE_PAYLOAD 1400
+
 UDP4_SOCKET            *gOknUdpSocketTransmit = NULL;
 UDP4_SOCKET            *gOknUdpRxSockets[MAX_UDP4_RX_SOCKETS];
 UINTN                   gOknUdpRxSocketCount    = 0;
@@ -12,6 +20,9 @@ EFI_HANDLE              gOknUdpRxActiveSbHandle = NULL;
 UDP4_SOCKET            *gOknJsonCtxSocket       = NULL;
 STATIC volatile BOOLEAN gOknUdpNicBound         = FALSE;  // ?
 
+/**
+ * 下面这两个变量是不是可以删除?
+ */
 static EFI_HANDLE sDefaultUdp4SbHandle = NULL;
 static CHAR8      sStartOfBuffer[MAX_UDP4_FRAGMENT_LENGTH];
 
@@ -63,6 +74,40 @@ VOID EFIAPI OknUdp4ReceiveHandler(IN EFI_EVENT Event, IN VOID *Context)
   EFI_STATUS             Status;
   UDP4_SOCKET           *Socket;
   EFI_UDP4_RECEIVE_DATA *RxData;
+
+  /**
+   * EFI_UDP4_CONFIG_DATA.DoNotFragment=TRUE 会在 IPv4 包上设置 DF 标志.
+   * 当 UDP payload(含 IP/UDP 头)超过 MTU 时, 网络栈必须分片(IP 层分片); 但 DF=1
+   * 时禁止分片, 发送要么失败、要么直接不出线. 表现为: Qt/Python已经发送了命令, MT86也显示收到了这个命令,
+   * 但是MT86就是没有任何回复, 在HW_INFO这个命令的时候就有这个问题, 因为当时的g_numSMBIOSMem是32,
+   * 导致HW_INFO的回复保温很大, 然后添加打印调式发现TX一直失败, OknUdp4TxFreeHandler一直没被调用;
+   * 因对端能收到请求, 但你这端永远收不到回包; 抓包看到只有请求; TX 完成回调不触发.
+   *
+   * 当 datagram 太大时, 能不能发、怎么处理取决于:
+   *  - IP 层是否允许分片(表现在用 DoNotFragment 控 DF)
+   *  - 路径 MTU(PMTU)发现是否工作
+   *  - UDP4/IP4 驱动/协议实现是否稳定支持分片
+   *  - 交换机/链路是否会丢分片(很常见)
+   *  - 所以"默认分包多大"没有一个固定值; 核心约束就是: 不能超过链路 MTU 所允许的单包大小, 超过就需要
+   *    IP分片(DF=FALSE)或直接失败(DF=TRUE).
+   */
+  EFI_UDP4_CONFIG_DATA TxCfg = {
+      TRUE,                  // AcceptBroadcast
+      FALSE,                 // AcceptPromiscuous
+      FALSE,                 // AcceptAnyPort
+      TRUE,                  // AllowDuplicatePort
+      0,                     // TypeOfService
+      16,                    // TimeToLive
+      FALSE,                 // DoNotFragment  (Tx 可能很大, 这样就必须允许分片, 这样避免TX失败)
+      0,                     // ReceiveTimeout
+      0,                     // TransmitTimeout
+      TRUE,                  // UseDefaultAddress
+      {{0, 0, 0, 0}},        // StationAddress
+      {{0, 0, 0, 0}},        // SubnetMask
+      OKN_STATION_UDP_PORT,  // StationPort
+      {{0, 0, 0, 0}},        // RemoteAddress (unused when using UdpSessionData)
+      0,                     // RemotePort    (unused when using UdpSessionData)
+  };
 
   Socket = (UDP4_SOCKET *)Context;
   if (NULL == Socket || NULL == Socket->Udp4) {
@@ -120,31 +165,7 @@ VOID EFIAPI OknUdp4ReceiveHandler(IN EFI_EVENT Event, IN VOID *Context)
   // 6) 懒创建 TX socket: 只创建一次, 绑定到选中的 SB handle
   //    注意: NotifyTransmit 改为 OknUdp4TxFreeHandler, 用于释放本次发送的内存
   if (NULL == gOknUdpSocketTransmit && gOknUdpRxActiveSbHandle != NULL) {
-    /**
-     * EFI_UDP4_CONFIG_DATA.DoNotFragment=TRUE 会在 IPv4 包上设置 DF 标志. 
-     * 当 UDP payload(含 IP/UDP 头)超过 MTU 时, 网络栈必须分片; 但 DF=1 时禁止分片，发送要么失败、要么直接不出线. 
-     * 表现为：Qt/Python已经发送了命令, MT86也显示收到了这个命令, 但是MT86就是没有任何回复,
-     * 在HW_INFO这个命令的时候就有这个问题, 因为当时的g_numSMBIOSMem是32, 导致HW_INFO的回复保温很大,
-     * 然后添加打印调式发现TX一直失败, OknUdp4TxFreeHandler一直没被调用;
-     * 因对端能收到请求，但你这端永远收不到回包; 抓包看到只有请求; TX 完成回调不触发. 
-     */
-    EFI_UDP4_CONFIG_DATA TxCfg = {
-        TRUE,                  // AcceptBroadcast
-        FALSE,                 // AcceptPromiscuous
-        FALSE,                 // AcceptAnyPort
-        TRUE,                  // AllowDuplicatePort
-        0,                     // TypeOfService
-        16,                    // TimeToLive
-        FALSE,                 // DoNotFragment  (Tx 可能很大, 这样就必须允许分片, 这样避免TX失败)
-        0,                     // ReceiveTimeout
-        0,                     // TransmitTimeout
-        TRUE,                  // UseDefaultAddress
-        {{0, 0, 0, 0}},        // StationAddress
-        {{0, 0, 0, 0}},        // SubnetMask
-        OKN_STATION_UDP_PORT,  // StationPort
-        {{0, 0, 0, 0}},        // RemoteAddress (unused when using UdpSessionData)
-        0,                     // RemotePort    (unused when using UdpSessionData)
-    };
+
 
     EFI_STATUS TxStatus;
 
@@ -184,7 +205,7 @@ VOID EFIAPI OknUdp4ReceiveHandler(IN EFI_EVENT Event, IN VOID *Context)
 
 #ifdef OKN_UDP_DBG
   /**
-   * 在收到包后、Parse 之前打印：来源 IP/端口 + payload 长度 + 前 64 字符
+   * 在收到包后、Parse 之前打印: 来源 IP/端口 + payload 长度 + 前 64 字符
    */
   Print(L"[OKN_RX] from ");
   OknPrintIpv4A(RxData->UdpSession.SourceAddress);
@@ -202,7 +223,7 @@ VOID EFIAPI OknUdp4ReceiveHandler(IN EFI_EVENT Event, IN VOID *Context)
                                       RxData->FragmentTable[0].FragmentLength);
 
   if (Tree != NULL) {
-    // 9) 设置 JsonHandler 上下文: 确保 areyouok 填的是“当前 NIC”的 MAC/IP
+    // 9) 设置 JsonHandler 上下文: 确保 areyouok 填的是"当前 NIC"的 MAC/IP
     gOknJsonCtxSocket = Socket;
     OknMT_DispatchJsonCmd(gOknMtProtoPtr, Tree, &gOknTestReset);
     gOknJsonCtxSocket = NULL;
@@ -210,23 +231,28 @@ VOID EFIAPI OknUdp4ReceiveHandler(IN EFI_EVENT Event, IN VOID *Context)
     // 10) 生成响应 JSON(cJSON_PrintUnformatted 返回需要 cJSON_free 的内存)
     CHAR8 *JsonStr = cJSON_PrintUnformatted(Tree);
     if (JsonStr != NULL) {
-      UINT32 JsonStrLen = (UINT32)AsciiStrLen(JsonStr);
+      UINT32 JsonStrLen = (UINT32)AsciiStrLen(JsonStr);  // 注意 坑位: JsonStrLen长度是了少了'\0';
 
 #ifdef OKN_UDP_DBG
       Print(L"[OKN_TX_PRE] resp_len=%u\n", (UINTN)JsonStrLen);
-      if (JsonStrLen > 1400) {
-        Print(L"[OKN_TX_WARN] resp too big (%u), DF=%d may fail\n",
-              (UINTN)JsonStrLen,
-              1 /* 你当前 TxCfg.DoNotFragment=TRUE */);
+      if (JsonStrLen > OKN_UDP_SAFE_PAYLOAD) {
+        Print(L"[OKN_TX_WARN] resp too big (%u), DF=%d may fail\n", (UINTN)JsonStrLen, TxCfg.DoNotFragment);
       }
 #endif  // OKN_UDP_DBG
 
-      // 关键: Transmit 是异步的, 不能直接把 JsonStr 指针塞给 TxData 再立刻释放
-      // 所以这里复制一份到 Pool, TX 完成回调里释放
-      VOID *Payload = AllocateCopyPool(JsonStrLen, JsonStr);
+      /**
+       * 关键: Transmit 是异步的, 不能直接把 JsonStr 指针塞给 TxData 再立刻释放, 所以这里复制一份到 Pool, TX
+       * 完成回调里释放;
+       * +1 是因为JsonStrLen是纯字符, 末尾是没有\0的, 如果不+1, 下面的应用就很危险:
+       * Print(L"%a", Payload) / 传给需要 NUL 结尾的 API就会越界读;
+       */
+      VOID *Payload = AllocateZeroPool(JsonStrLen + 1);  // 自动补零
+
       cJSON_free(JsonStr);
 
       if (Payload != NULL && JsonStrLen > 0) {
+        CopyMem(Payload, JsonStr, JsonStrLen);  // 注意: TxData->FragmentLength 仍然是 JsonStrLen(不带 '\0')
+
         EFI_UDP4_SESSION_DATA *Sess = AllocateZeroPool(sizeof(EFI_UDP4_SESSION_DATA));
         if (Sess != NULL) {
           Sess->DestinationAddress = RxData->UdpSession.SourceAddress;
@@ -247,7 +273,7 @@ VOID EFIAPI OknUdp4ReceiveHandler(IN EFI_EVENT Event, IN VOID *Context)
           TxData->UdpSessionData                  = Sess;
           TxData->DataLength                      = JsonStrLen;
           TxData->FragmentCount                   = 1;
-          TxData->FragmentTable[0].FragmentLength = JsonStrLen;
+          TxData->FragmentTable[0].FragmentLength = JsonStrLen; // 这个是不包含\0的, 加了也不会被发送
           TxData->FragmentTable[0].FragmentBuffer = Payload;
 
           // 记录待释放资源, TX 完成回调释放
@@ -283,7 +309,10 @@ VOID EFIAPI OknUdp4ReceiveHandler(IN EFI_EVENT Event, IN VOID *Context)
         if (Payload)
           FreePool(Payload);
       }
-    }
+
+      // 在最后释放 JsonStr;
+      cJSON_free(JsonStr);
+    }  // if (JsonStr != NULL)
 
     cJSON_Delete(Tree);
   }
