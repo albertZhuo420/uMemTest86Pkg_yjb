@@ -120,6 +120,14 @@ VOID EFIAPI OknUdp4ReceiveHandler(IN EFI_EVENT Event, IN VOID *Context)
   // 6) 懒创建 TX socket: 只创建一次, 绑定到选中的 SB handle
   //    注意: NotifyTransmit 改为 OknUdp4TxFreeHandler, 用于释放本次发送的内存
   if (NULL == gOknUdpSocketTransmit && gOknUdpRxActiveSbHandle != NULL) {
+    /**
+     * EFI_UDP4_CONFIG_DATA.DoNotFragment=TRUE 会在 IPv4 包上设置 DF 标志. 
+     * 当 UDP payload(含 IP/UDP 头)超过 MTU 时, 网络栈必须分片; 但 DF=1 时禁止分片，发送要么失败、要么直接不出线. 
+     * 表现为：Qt/Python已经发送了命令, MT86也显示收到了这个命令, 但是MT86就是没有任何回复,
+     * 在HW_INFO这个命令的时候就有这个问题, 因为当时的g_numSMBIOSMem是32, 导致HW_INFO的回复保温很大,
+     * 然后添加打印调式发现TX一直失败, OknUdp4TxFreeHandler一直没被调用;
+     * 因对端能收到请求，但你这端永远收不到回包; 抓包看到只有请求; TX 完成回调不触发. 
+     */
     EFI_UDP4_CONFIG_DATA TxCfg = {
         TRUE,                  // AcceptBroadcast
         FALSE,                 // AcceptPromiscuous
@@ -127,7 +135,7 @@ VOID EFIAPI OknUdp4ReceiveHandler(IN EFI_EVENT Event, IN VOID *Context)
         TRUE,                  // AllowDuplicatePort
         0,                     // TypeOfService
         16,                    // TimeToLive
-        FALSE,                 // DoNotFragment  (Tx 可能很大, 允许分片, 这样避免TX失败)
+        FALSE,                 // DoNotFragment  (Tx 可能很大, 这样就必须允许分片, 这样避免TX失败)
         0,                     // ReceiveTimeout
         0,                     // TransmitTimeout
         TRUE,                  // UseDefaultAddress
