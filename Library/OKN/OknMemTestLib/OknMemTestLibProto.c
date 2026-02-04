@@ -252,7 +252,7 @@ EFI_STATUS OknMT_GetDimmRankMapOutReason(IN OKN_MEMORY_TEST_PROTOCOL  *pProto,
     return Status;
   }
 
-  // 3) 调用 GetDimmTemp
+  // 3) 调用 GetDisReason
   DIMM_RANK_MAP_OUT_REASON Reason;
   Status = pProto->GetDisReason((UINT8)pSocket->valueu64, (UINT8)pChannel->valueu64, (UINT8)pDimm->valueu64, &Reason);
   if (TRUE == EFI_ERROR(Status)) {
@@ -264,7 +264,7 @@ EFI_STATUS OknMT_GetDimmRankMapOutReason(IN OKN_MEMORY_TEST_PROTOCOL  *pProto,
   return EFI_SUCCESS;
 }
 
-EFI_STATUS OknMT_GetDimmTemperature(IN OKN_MEMORY_TEST_PROTOCOL *pProto, IN CONST cJSON *pJsTree, OUT UINT8 *pTSensor0)
+EFI_STATUS OknMT_GetDimmTemperature(IN OKN_MEMORY_TEST_PROTOCOL *pProto, IN CONST cJSON *pJsTree, OUT UINT32 *pTSensor0)
 {
   EFI_STATUS Status = EFI_SUCCESS;
 
@@ -286,7 +286,7 @@ EFI_STATUS OknMT_GetDimmTemperature(IN OKN_MEMORY_TEST_PROTOCOL *pProto, IN CONS
   }
 
   // 3) 调用 GetDimmTemp
-  UINT8 Ts0 = 0, Ts1 = 0, Hub = 0;
+  UINT32 Ts0 = 0, Ts1 = 0, Hub = 0;
   Status = pProto->GetDimmTemp((UINT8)pSocket->valueu64,
                                (UINT8)pChannel->valueu64,
                                (UINT8)pDimm->valueu64,

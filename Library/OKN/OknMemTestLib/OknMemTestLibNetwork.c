@@ -4,10 +4,11 @@
  */
 
 #include <Library/MemTestSupportLib.h>
+#include <Protocol/Smbios.h>
+
 #include <Library/OKN/OknDdr4SpdLib.h>
 #include <Library/OKN/OknMemTestLib.h>
-#include <Library/OKN/OknUdp4SocketLib.h>
-#include <Protocol/Smbios.h>
+#include <Library/OKN/OknUdp4Lib.h>
 
 #define CMD_ENTRY(_name, _handler) {(_name), (_handler)}
 
@@ -510,8 +511,8 @@ STATIC EFI_STATUS Cmd_HwInfo(IN OKN_MEMORY_TEST_PROTOCOL *pProto, OUT cJSON *pJs
     BOOLEAN                  RamPresent    = FALSE;
     UINT8                    Online        = 0;
     INT32                    RamTemp0      = OKN_MAGIC_NUMBER;
-    INT8                     RamTemp1      = 0;
-    INT8                     HubTemp       = 0;
+    INT32                    RamTemp1      = 0;
+    INT32                    HubTemp       = 0;
     DIMM_RANK_MAP_OUT_REASON MapOutReason  = DimmRankMapOutMax;
     INT32                    SdramDevWidth = OKN_MAGIC_NUMBER;  // SDRAM Device Width
     INT32                    PkgRanksCnt   = OKN_MAGIC_NUMBER;  // Number of Package Ranks per DIMM
@@ -525,7 +526,7 @@ STATIC EFI_STATUS Cmd_HwInfo(IN OKN_MEMORY_TEST_PROTOCOL *pProto, OUT cJSON *pJs
       Online = RamPresent ? 1 : 0;
       if (TRUE == RamPresent) {
         // 读取温度
-        Status = pProto->GetDimmTemp(Socket, Channel, Dimm, (UINT8 *)&RamTemp0, (UINT8 *)&RamTemp1, (UINT8 *)&HubTemp);
+        Status = pProto->GetDimmTemp(Socket, Channel, Dimm, &RamTemp0, &RamTemp1, &HubTemp);
         if (TRUE == EFI_ERROR(Status)) {
           Print(L"[OKN_PROTO_ERROR] N%u:C%u:D%u - GetDimmTemp(): %r\n", Socket, Channel, Dimm, Status);
         }
