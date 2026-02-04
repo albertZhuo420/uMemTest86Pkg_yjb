@@ -166,7 +166,7 @@
 #include "images/qrcode.h"
 #include "images/qrcode_asus.h"
 // OKN
-#include <Library/OKN/OknUdp4SocketLib.h>
+#include <Library/OKN/OknUdp4Lib.h>
 #include <Library/OKN/OknMemTestLib.h>
 extern VOID EFIAPI UnlockAllMemRanges(VOID);
 extern VOID EFIAPI LockAllMemRanges(VOID);

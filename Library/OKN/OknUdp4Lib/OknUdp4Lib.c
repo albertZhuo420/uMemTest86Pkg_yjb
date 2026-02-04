@@ -1,5 +1,5 @@
 #include <Library/OKN/OknMemTestLib.h>
-#include <Library/OKN/OknUdp4SocketLib.h>
+#include <Library/OKN/OknUdp4Lib.h>
 #include <Library/OKN/PortingLibs/cJSONLib.h>
 
 /**

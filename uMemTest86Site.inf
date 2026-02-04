@@ -86,7 +86,7 @@
   NetLib
   # OKN 添加 ON
   cJSONLib
-  OknUdp4SocketLib
+  OknUdp4Lib
   OknDdr4SpdLib
   OknMemTestLib
   OknMemTestProtocol

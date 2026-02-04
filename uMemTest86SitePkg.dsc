@@ -71,7 +71,7 @@
   
   # OKN 添加 ON
   cJSONLib|uMemTest86Pkg/Library/OKN/PortingLibs/cJSONLib/cJSON.inf
-  OknUdp4SocketLib|uMemTest86Pkg/Library/OKN/OknUdp4SocketLib/OknUdp4SocketLib.inf
+  OknUdp4Lib|uMemTest86Pkg/Library/OKN/OknUdp4Lib/OknUdp4Lib.inf
   OknDdr4SpdLib|uMemTest86Pkg/Library/OKN/OknDdr4SpdLib/OknDdr4SpdLib.inf
   OknMemTestLib|uMemTest86Pkg/Library/OKN/OknMemTestLib/OknMemTestLib.inf
   OknMemTestProtocol|uMemTest86Pkg/Library/OKN/OknMemTestProtocol/OknMemTestProtocol.inf
