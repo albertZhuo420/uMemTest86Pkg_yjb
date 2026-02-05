@@ -309,9 +309,9 @@ STATIC EFI_STATUS Cmd_MT86Status(OUT cJSON *pJsTree)
       break;
     }
     cJSON *Detail = cJSON_CreateObject();
-    cJSON_AddNumberToObject(Detail, "Socket", Item.AddrDetail.SocketId);
-    cJSON_AddNumberToObject(Detail, "MemCtrl", Item.AddrDetail.MemCtrlId);
-    cJSON_AddNumberToObject(Detail, "Channel", Item.AddrDetail.MemCtrlId * 2 + Item.AddrDetail.ChannelId);
+    cJSON_AddNumberToObject(Detail, "Sock", Item.AddrDetail.SocketId);
+    cJSON_AddNumberToObject(Detail, "MC", Item.AddrDetail.MemCtrlId);
+    cJSON_AddNumberToObject(Detail, "Ch", Item.AddrDetail.MemCtrlId * 2 + Item.AddrDetail.ChannelId);
     cJSON_AddNumberToObject(Detail, "Dimm", 0);
     cJSON_AddNumberToObject(Detail, "Rank", Item.AddrDetail.RankId);
     cJSON_AddNumberToObject(Detail, "SubCh", Item.AddrDetail.SubChId);
@@ -510,14 +510,14 @@ STATIC EFI_STATUS Cmd_HwInfo(IN OKN_MEMORY_TEST_PROTOCOL *pProto, OUT cJSON *pJs
 
     BOOLEAN                  RamPresent    = FALSE;
     UINT8                    Online        = 0;
-    INT32                    RamTemp0      = OKN_MAGIC_NUMBER;
-    INT32                    RamTemp1      = 0;
-    INT32                    HubTemp       = 0;
+    UINT32                   RamTemp0      = OKN_MAGIC_NUMBER;
+    UINT32                   RamTemp1      = 0;
+    UINT32                   HubTemp       = 0;
     DIMM_RANK_MAP_OUT_REASON MapOutReason  = DimmRankMapOutMax;
-    INT32                    SdramDevWidth = OKN_MAGIC_NUMBER;  // SDRAM Device Width
-    INT32                    PkgRanksCnt   = OKN_MAGIC_NUMBER;  // Number of Package Ranks per DIMM
-    INT32                    SdramPkgCnt   = OKN_MAGIC_NUMBER;  // SDRAM Chip Count, 不含ECC
-    INT32                    EccPkgCnt     = OKN_MAGIC_NUMBER;  // ECC Chip Count
+    UINT32                   SdramDevWidth = OKN_MAGIC_NUMBER;  // SDRAM Device Width
+    UINT32                   PkgRanksCnt   = OKN_MAGIC_NUMBER;  // Number of Package Ranks per DIMM
+    UINT32                   SdramPkgCnt   = OKN_MAGIC_NUMBER;  // SDRAM Chip Count, 不含ECC
+    UINT32                   EccPkgCnt     = OKN_MAGIC_NUMBER;  // ECC Chip Count
 
     Status = pProto->IsDimmPresent(Socket, Channel, Dimm, &RamPresent);
     Print(L"[OKN_PROTO] N%u:C%u:D%u - IsDimmPresent(): %r\n", Socket, Channel, Dimm, Status);
@@ -541,11 +541,22 @@ STATIC EFI_STATUS Cmd_HwInfo(IN OKN_MEMORY_TEST_PROTOCOL *pProto, OUT cJSON *pJs
         Status              = pProto->SpdRead(Socket, Channel, Dimm, SpdData, &SpdReadLen);
         if (FALSE == EFI_ERROR(Status)) {
           if (DDR4_SPD_LEN == SpdReadLen) {
-            // 这里没有检查返回值, 因为我使用了 OKN_MAGIC_ERR_NUM作为错误标志;
-            OknDdr4SpdGetSdramDeviceWidthBits(SpdData, DDR4_SPD_LEN, (UINT16 *)&SdramDevWidth);
-            OknDdr4SpdGetPackageRanksPerDimm(SpdData, DDR4_SPD_LEN, (UINT8 *)&PkgRanksCnt);
-            OknDdr4SpdEstimateTotalDataPackages(SpdData, DDR4_SPD_LEN, (UINT16 *)&SdramPkgCnt);
-            OknDdr4SpdEstimateTotalEccPackages(SpdData, DDR4_SPD_LEN, (UINT16 *)&EccPkgCnt);
+            // clang-format off
+            UINT16 SdramDevWidthTmp = 0; UINT8  PkgRanksCntTmp = 0;
+            UINT16 SdramPkgCntTmp   = 0; UINT16 EccPkgCntTmp   = 0;
+            /**
+             * 下面的赋值操作必须要强转成(UINT32), 否则当PkgRanksCntTmp = 1时, PKG_RANK_CNT会变成9473, 
+             * 原因是 PkgRanksCnt = PkgRanksCntTmp 这种操作只修改了PkgRanksCnt的低8位!!
+             */
+            Status = OknDdr4SpdGetSdramDeviceWidthBits(SpdData, DDR4_SPD_LEN, &SdramDevWidthTmp);
+            if (FALSE == EFI_ERROR(Status)) { SdramDevWidth = (UINT32)SdramDevWidthTmp; }
+            Status =OknDdr4SpdGetPackageRanksPerDimm(SpdData, DDR4_SPD_LEN, &PkgRanksCntTmp);
+            if (FALSE == EFI_ERROR(Status)) { PkgRanksCnt = (UINT32)PkgRanksCntTmp; }
+            Status =OknDdr4SpdEstimateTotalDataPackages(SpdData, DDR4_SPD_LEN, &SdramPkgCntTmp);
+            if (FALSE == EFI_ERROR(Status)) { SdramPkgCnt = (UINT32)SdramPkgCntTmp; }
+            Status =OknDdr4SpdEstimateTotalEccPackages(SpdData, DDR4_SPD_LEN, &EccPkgCntTmp);
+            if (FALSE == EFI_ERROR(Status)) { EccPkgCnt = (UINT32)EccPkgCntTmp; }
+            // clang-format on
           }
           else {
             Print(L"[OKN_PROTO_ERROR] N%u:C%u:D%u - SpdRead(): %r\n", Socket, Channel, Dimm, Status);
@@ -553,7 +564,7 @@ STATIC EFI_STATUS Cmd_HwInfo(IN OKN_MEMORY_TEST_PROTOCOL *pProto, OUT cJSON *pJs
         }
         else {
           // clang-format off
-          Print(L"[OKN_UEFI_ERR] [%s] SpdRead() failed for Skt %d Ch %d Dimm %d: %r\n",
+          Print(L"[OKN_PROTO_ERR] [%s] SpdRead() failed for Skt %d Ch %d Dimm %d: %r\n",
                 __func__, Socket, Channel, Dimm, Status);
           // clang-format on
         }
@@ -563,8 +574,8 @@ STATIC EFI_STATUS Cmd_HwInfo(IN OKN_MEMORY_TEST_PROTOCOL *pProto, OUT cJSON *pJs
     cJSON_AddNumberToObject(Info, "ONLINE", Online);
     cJSON_AddNumberToObject(Info, "RAM_TEMP", RamTemp0);
     cJSON_AddNumberToObject(Info, "MAP_OUT_REASON_CODE", (UINT32)MapOutReason);
-    cJSON_AddNumberToObject(Info, "SDRAM_DEV_WIDTH", (UINT32)SdramDevWidth);
-    cJSON_AddNumberToObject(Info, "PKG_RANK_CNT", (UINT32)PkgRanksCnt);
+    cJSON_AddNumberToObject(Info, "SDRAM_DEV_WIDTH", SdramDevWidth);
+    cJSON_AddNumberToObject(Info, "PKG_RANK_CNT", PkgRanksCnt);
     cJSON_AddNumberToObject(Info, "SDRAM_PKG_CNT", SdramPkgCnt);
     cJSON_AddNumberToObject(Info, "ECC_PKG_CNT", EccPkgCnt);
 
