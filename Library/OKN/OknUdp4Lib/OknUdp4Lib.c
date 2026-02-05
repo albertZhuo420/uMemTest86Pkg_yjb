@@ -20,24 +20,20 @@
  */
 #define OKN_UDP_SAFE_PAYLOAD 1400
 
-UINTN              gOknUdpEdpOnlineCnt = 0;
-OKN_UDP4_ENDPOINT *gOknJsonCtxUdpEdp   = NULL;
+OKN_UDP4_ENDPOINT *gOknJsonCtxUdpEdp = NULL;
 
+UINTN sOknUdpEdpOnlineCnt = 0;
 /**
  * 保存 `sOknUdpActiveEdpSbEfiHandle` 的意义是:以后要创建 TX child / 其他 child 时,
  * 直接锁定到这张 NIC 的 ServiceBinding.
  *
  * sOknUdpActiveEdpSbEfiHandle 与 sOknUdpActiveEdp 的关系有点父对象与子对象之间的关系
  */
-EFI_HANDLE                sOknUdpActiveEdpSbEfiHandle = NULL;
+STATIC EFI_HANDLE         sOknUdpActiveEdpSbEfiHandle = NULL;
 STATIC OKN_UDP4_ENDPOINT *sOknUdpXferEdp              = NULL;
 // sOknUdpActiveEdp用来表示是找到那个可以通信的NIC
 STATIC OKN_UDP4_ENDPOINT *sOknUdpActiveEdp = NULL;
 STATIC OKN_UDP4_ENDPOINT *sOknUdpEpdArr[MAX_UDP4_RX_SOCKETS];  // 只用于第一次匹配在线的ENDPOINT
-/**
- * 下面这两个变量是不是可以删除?
- */
-static EFI_HANDLE sDefaultUdp4SbHandle = NULL;
 
 STATIC VOID       OknPrintMac(IN CONST EFI_MAC_ADDRESS *Mac, IN UINT32 HwAddrSize);
 STATIC VOID       OknPrintIpv4A(IN CONST EFI_IPv4_ADDRESS Ip);
@@ -61,7 +57,7 @@ RETURN_STATUS EFIAPI OknUdp4SocketLibConstructor(VOID)
   EFI_HANDLE          *Udp4Handles;
   EFI_USB_IO_PROTOCOL *UsbIo;
 
-  sDefaultUdp4SbHandle = NULL;
+  EFI_HANDLE DefaultUdp4SbHandle = NULL;
 
   Status = gBS->LocateHandleBuffer(ByProtocol, &gEfiUdp4ServiceBindingProtocolGuid, NULL, &HandleNum, &Udp4Handles);
   if (TRUE == EFI_ERROR(Status)) {
@@ -76,7 +72,7 @@ RETURN_STATUS EFIAPI OknUdp4SocketLibConstructor(VOID)
       continue;
     }
 
-    sDefaultUdp4SbHandle = Udp4Handles[i];
+    DefaultUdp4SbHandle = Udp4Handles[i];
     break;
   }
 
@@ -85,7 +81,7 @@ RETURN_STATUS EFIAPI OknUdp4SocketLibConstructor(VOID)
     Udp4Handles = NULL;
   }
 
-  return (sDefaultUdp4SbHandle != NULL) ? EFI_SUCCESS : EFI_NOT_FOUND;
+  return (DefaultUdp4SbHandle != NULL) ? EFI_SUCCESS : EFI_NOT_FOUND;
 }
 
 VOID EFIAPI OknUdp4ReceiveHandler(IN EFI_EVENT Event, IN VOID *Context)
@@ -167,7 +163,7 @@ VOID EFIAPI OknUdp4ReceiveHandler(IN EFI_EVENT Event, IN VOID *Context)
     sOknUdpActiveEdp            = OknUdpEdpInstance;
     sOknUdpActiveEdpSbEfiHandle = OknUdpEdpInstance->ServiceBindingHandle;
 
-    for (UINTN i = 0; i < gOknUdpEdpOnlineCnt; i++) {
+    for (UINTN i = 0; i < sOknUdpEdpOnlineCnt; i++) {
       if (sOknUdpEpdArr[i] != NULL && sOknUdpEpdArr[i] != OknUdpEdpInstance) {
         OknDisableUdpRxSocket(sOknUdpEpdArr[i]);
       }
@@ -400,7 +396,7 @@ EFI_STATUS OknStartUdp4ReceiveOnAllNics(IN EFI_UDP4_CONFIG_DATA *RxCfg)
 
   Handles             = NULL;
   HandleNum           = 0;
-  gOknUdpEdpOnlineCnt = 0;
+  sOknUdpEdpOnlineCnt = 0;
 
   Print(L"[OKN_UDP] LocateHandleBuffer(Udp4ServiceBinding) ...\n");
   Status = gBS->LocateHandleBuffer(ByProtocol, &gEfiUdp4ServiceBindingProtocolGuid, NULL, &HandleNum, &Handles);
@@ -417,7 +413,7 @@ EFI_STATUS OknStartUdp4ReceiveOnAllNics(IN EFI_UDP4_CONFIG_DATA *RxCfg)
         (UINT32)RxCfg->StationPort,
         (UINT32)RxCfg->RemotePort);
 
-  for (UINTN i = 0; i < HandleNum && gOknUdpEdpOnlineCnt < MAX_UDP4_RX_SOCKETS; i++) {
+  for (UINTN i = 0; i < HandleNum && sOknUdpEdpOnlineCnt < MAX_UDP4_RX_SOCKETS; i++) {
     Print(L"[OKN_UDP] SB[%u] Handle=%p\n", (UINT32)i, Handles[i]);
 
     // 跳过 USB NIC, 不跳过是不是也行??
@@ -476,53 +472,57 @@ EFI_STATUS OknStartUdp4ReceiveOnAllNics(IN EFI_UDP4_CONFIG_DATA *RxCfg)
     }
 
     // 创建 socket
-    OKN_UDP4_ENDPOINT *Sock = NULL;
-    Status =
-        OknCreateUdpEndpointByServiceBindingHandle(Handles[i], RxCfg, OknUdp4ReceiveHandler, OknUdp4NullHandler, &Sock);
-    Print(L"[OKN_UDP]   CreateSock: %r, Sock=%p\n", Status, Sock);
-    if (TRUE == EFI_ERROR(Status) || NULL == Sock) {
+    OKN_UDP4_ENDPOINT *UdpEdp = NULL;
+    Status                    = OknCreateUdpEndpointByServiceBindingHandle(Handles[i],
+                                                        RxCfg,
+                                                        OknUdp4ReceiveHandler,
+                                                        OknUdp4NullHandler,
+                                                        &UdpEdp);
+    Print(L"[OKN_UDP]   CreateSock: %r, UDP Endpoint=%p\n", Status, UdpEdp);
+    if (TRUE == EFI_ERROR(Status) || NULL == UdpEdp) {
       Print(L"[OKN_UDP_ERROR]  Skip: CreateSock failed\n");
       continue;
     }
 
-    // 保存 NIC 身份到 Sock(关键)
+    // 保存 NIC 身份到 UdpEdp(关键)
     do {
       if (HasSnp && Snp->Mode && Snp->Mode->HwAddressSize >= 6) {
-        CopyMem(Sock->NicMac, Snp->Mode->CurrentAddress.Addr, 6);
+        CopyMem(UdpEdp->NicMac, Snp->Mode->CurrentAddress.Addr, 6);
       }
       else {
-        ZeroMem(Sock->NicMac, 6);
+        ZeroMem(UdpEdp->NicMac, 6);
       }
 
-      Sock->NicIpValid = !EFI_ERROR(DhcpStatus);
-      if (Sock->NicIpValid) {
-        Sock->NicIp = Ip;
+      UdpEdp->NicIpValid = !EFI_ERROR(DhcpStatus);
+      if (UdpEdp->NicIpValid) {
+        UdpEdp->NicIp = Ip;
       }
       else {
-        ZeroMem(&Sock->NicIp, sizeof(Sock->NicIp));
+        ZeroMem(&UdpEdp->NicIp, sizeof(UdpEdp->NicIp));
       }
     } while (0);
 
-    Sock->TokenReceive.Packet.RxData = NULL;
-    Status                           = Sock->Udp4Proto->Receive(Sock->Udp4Proto, &Sock->TokenReceive);
-    Print(L"[OKN_UDP]   Sock->Udp4Proto->Receive(submit): %r\n", Status);
+    UdpEdp->TokenReceive.Packet.RxData = NULL;
+    Status                             = UdpEdp->Udp4Proto->Receive(UdpEdp->Udp4Proto, &UdpEdp->TokenReceive);
+    Print(L"[OKN_UDP]   UdpEdp->Udp4Proto->Receive(submit): %r\n", Status);
     if (TRUE == EFI_ERROR(Status)) {
       Print(L"[OKN_UDP_ERROR]  Receive() FAILED on SB handle %p: %r\n", Handles[i], Status);
-      OknCloseUdp4Socket(Sock);
+      OknCloseUdp4Socket(UdpEdp);
       continue;
     }
 
-    sOknUdpEpdArr[gOknUdpEdpOnlineCnt++] = Sock;
-    Print(L"[OKN_UDP]   Added RX socket. Count=%u\n", (UINT32)gOknUdpEdpOnlineCnt);
+    sOknUdpEpdArr[sOknUdpEdpOnlineCnt++] = UdpEdp;
+    Print(L"[OKN_UDP]   Added RX socket. Count=%u\n", (UINT32)sOknUdpEdpOnlineCnt);
   }  // for() 结束
 
   if (Handles != NULL) {
     FreePool(Handles);
   }
 
-  Print(L"[OKN_UDP] Exit OknStartUdp4ReceiveOnAllNics(): gOknUdpEdpOnlineCnt=%u\n", (UINT32)gOknUdpEdpOnlineCnt);
-  gBS->Stall(2 * 1000 * 1000);
-  return (gOknUdpEdpOnlineCnt > 0) ? EFI_SUCCESS : EFI_NOT_FOUND;
+  Status = (sOknUdpEdpOnlineCnt > 0) ? EFI_SUCCESS : EFI_NOT_FOUND;
+  Print(L"[OKN_UDP] Exit OknStartUdp4ReceiveOnAllNics: %r,  RxSockCnt=%u\n", Status, (UINT32)sOknUdpEdpOnlineCnt);
+
+  return Status;
 }
 
 EFI_STATUS OknWaitForUdpNicBind(UINTN TimeoutMs)
@@ -648,7 +648,7 @@ STATIC UINTN OknCountHandlesByProtocol(IN EFI_GUID *Guid)
 
 STATIC VOID OknPollAllUdpSockets(VOID)
 {
-  for (UINTN i = 0; i < gOknUdpEdpOnlineCnt; ++i) {
+  for (UINTN i = 0; i < sOknUdpEdpOnlineCnt; ++i) {
     if (sOknUdpEpdArr[i] != NULL && sOknUdpEpdArr[i]->Udp4Proto != NULL) {
       sOknUdpEpdArr[i]->Udp4Proto->Poll(sOknUdpEpdArr[i]->Udp4Proto);
     }

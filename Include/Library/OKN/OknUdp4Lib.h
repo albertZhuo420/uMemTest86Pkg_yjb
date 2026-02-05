@@ -49,7 +49,6 @@ typedef struct {
   BOOLEAN                TxInProgress;
 } OKN_UDP4_ENDPOINT;
 
-extern UINTN              gOknUdpEdpOnlineCnt;
 extern OKN_UDP4_ENDPOINT *gOknJsonCtxUdpEdp;
 
 /**
