@@ -213,22 +213,22 @@ EFI_STATUS OknMT_GetMemCfgFromJson(IN CONST cJSON *pJsTree, OUT OKN_MEMORY_CONFI
   if ((tCL_pVal != NULL) && (cJSON_Number == tCL_pVal->type)) { pCfg->tCAS = (UINT8)tCL_pVal->valueu64;}
   if ((tRCD_pVal != NULL) && (cJSON_Number == tRCD_pVal->type)) { pCfg->tRCD = (UINT8)tRCD_pVal->valueu64;}
   if ((tRP_pVal != NULL) && (cJSON_Number == tRP_pVal->type)) { pCfg->tRP = (UINT8)tRP_pVal->valueu64;}
-  if ((tRAS_pVal != NULL) && (cJSON_Number == tRAS_pVal->type)) { pCfg->tRAS = (UINT8)tRAS_pVal->valueu64;}
+  if ((tRAS_pVal != NULL) && (cJSON_Number == tRAS_pVal->type)) { pCfg->tRAS = (UINT16)tRAS_pVal->valueu64;}
   if ((tCWL_pVal != NULL) && (cJSON_Number == tCWL_pVal->type)) { pCfg->tCWL = (UINT8)tCWL_pVal->valueu64;}
   if ((tRTP_pVal != NULL) && (cJSON_Number == tRTP_pVal->type)) { pCfg->tRTP = (UINT8)tRTP_pVal->valueu64;}
   if ((tWR_pVal != NULL) && (cJSON_Number == tWR_pVal->type)) { pCfg->tWR = (UINT8)tWR_pVal->valueu64;}
   if ((tRRD_S_pVal != NULL) && (cJSON_Number == tRRD_S_pVal->type)) { pCfg->tRRD = (UINT8)tRRD_S_pVal->valueu64;}
   if ((tFAW_pVal != NULL) && (cJSON_Number == tFAW_pVal->type)) { pCfg->tFAW = (UINT8)tFAW_pVal->valueu64;}
-  if ((tREFI_pVal != NULL) && (cJSON_Number == tREFI_pVal->type)) { pCfg->tREFI = (UINT8)tREFI_pVal->valueu64;}
+  if ((tREFI_pVal != NULL) && (cJSON_Number == tREFI_pVal->type)) { pCfg->tREFI = (UINT16)tREFI_pVal->valueu64;}
   if ((tWTR_S_pVal != NULL) && (cJSON_Number == tWTR_S_pVal->type)) { pCfg->tWTR = (UINT8)tWTR_S_pVal->valueu64;}
-  if ((tRFC_pVal != NULL) && (cJSON_Number == tRFC_pVal->type)) { pCfg->tRFC1 = (UINT8)tRFC_pVal->valueu64;}
-  if ((tRC_pVal != NULL) && (cJSON_Number == tRC_pVal->type)) { pCfg->tRC = (UINT8)tRC_pVal->valueu64;}
+  if ((tRFC_pVal != NULL) && (cJSON_Number == tRFC_pVal->type)) { pCfg->tRFC1 = (UINT16)tRFC_pVal->valueu64;}
+  if ((tRC_pVal != NULL) && (cJSON_Number == tRC_pVal->type)) { pCfg->tRC = (UINT16)tRC_pVal->valueu64;}
   if ((tCCD_pVal != NULL) && (cJSON_Number == tCCD_pVal->type)) { pCfg->tCCD = (UINT8)tCCD_pVal->valueu64;}
   if ((CommandRate_pVal != NULL) && (cJSON_Number == CommandRate_pVal->type)) { pCfg->CommandTiming = (UINT8)CommandRate_pVal->valueu64;}
   // Voltages
-  if ((Vdd_pVal != NULL) && (cJSON_Number == Vdd_pVal->type)) { pCfg->DfxPmicVdd = (UINT8)Vdd_pVal->valueu64;}
-  if ((Vddq_pVal != NULL) && (cJSON_Number == Vddq_pVal->type)) { pCfg->DfxPmicVddQ = (UINT8)Vddq_pVal->valueu64;}
-  if ((Vpp_pVal != NULL) && (cJSON_Number == Vpp_pVal->type)) { pCfg->DfxPmicVpp = (UINT8)Vpp_pVal->valueu64;}
+  if ((Vdd_pVal != NULL) && (cJSON_Number == Vdd_pVal->type)) { pCfg->DfxPmicVdd = (UINT16)Vdd_pVal->valueu64;}
+  if ((Vddq_pVal != NULL) && (cJSON_Number == Vddq_pVal->type)) { pCfg->DfxPmicVddQ = (UINT16)Vddq_pVal->valueu64;}
+  if ((Vpp_pVal != NULL) && (cJSON_Number == Vpp_pVal->type)) { pCfg->DfxPmicVpp = (UINT16)Vpp_pVal->valueu64;}
   // MISC
   if ((EnRMT_pVal != NULL)  && (cJSON_Number == EnRMT_pVal->type)) { pCfg->EnableRMT = (UINT8)EnRMT_pVal->valueu64;}
   if ((Por_pVal != NULL)  && (cJSON_Number == Por_pVal->type)) { pCfg->EnforcePopulationPor = (UINT8)Por_pVal->valueu64;}
