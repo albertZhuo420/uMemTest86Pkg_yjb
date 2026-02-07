@@ -71,18 +71,6 @@ STATIC CONST OKN_MT_CMD_DISPATCH gOknCmdTable[] = {
     CMD_ENTRY("GetMemConfigReal", OknMT_ProcessJsonCmd_GetMemConfigReal),
     CMD_ENTRY("SetMemConfig", OknMT_ProcessJsonCmd_SetMemConfig),
     CMD_ENTRY("ResetSystem", OknMT_ProcessJsonCmd_ResetSystem),
-    // ---- 兼容旧命令名（保留一段时间再删除）----
-    CMD_ENTRY("amtStart", OknMT_ProcessJsonCmd_SetAmtConfig),
-    CMD_ENTRY("testStatus", OknMT_ProcessJsonCmd_MT86Status),
-    CMD_ENTRY("testStart", OknMT_ProcessJsonCmd_MT86Start),
-    CMD_ENTRY("testStop", OknMT_ProcessJsonCmd_MT86Abort),
-    CMD_ENTRY("areyouok", OknMT_ProcessJsonCmd_Reply9527),
-    CMD_ENTRY("connect", OknMT_ProcessJsonCmd_HwInfo),
-    CMD_ENTRY("readSPD", OknMT_ProcessJsonCmd_ReadSPD),
-    CMD_ENTRY("testConfigGet", OknMT_ProcessJsonCmd_GetMemConfig),
-    CMD_ENTRY("testConfigActive", OknMT_ProcessJsonCmd_GetMemConfigReal),
-    CMD_ENTRY("testConfigSet", OknMT_ProcessJsonCmd_SetMemConfig),
-    CMD_ENTRY("reset", OknMT_ProcessJsonCmd_ResetSystem),
 };
 /*************************************************************************************************/
 #endif  // OKN 前置定义区域 OFF

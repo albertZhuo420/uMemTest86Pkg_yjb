@@ -8,6 +8,9 @@
 OKN_MEMORY_TEST_PROTOCOL *gOknMtProtoPtr   = NULL;
 EFI_HANDLE                gOknChosenHandle = NULL;
 
+STATIC VOID OknMT_SetAmtConfigDefault(OUT OKN_AMT_CONFIGURATION *AmtCfg);
+STATIC VOID OknMT_PrintAmtConfig(IN CONST OKN_AMT_CONFIGURATION *AmtCfg);
+
 /**
  * @description: 初始化 全局变量 gOknMtProtoPtr 和 gOknChosenHandle
  * @return EFI_STATUS
@@ -126,6 +129,7 @@ EFI_STATUS OknMT_SetAmtConfig(IN OKN_MEMORY_TEST_PROTOCOL *pProto, IN CONST cJSO
   }
 
   ZeroMem(&AmtCfg, sizeof(AmtCfg));
+  OknMT_SetAmtConfigDefault(&AmtCfg);
 
   // 1) 解析 OPTIONS / LOOPS / PPR
   Status = OknMT_JsonGetU32FromObject(pJsTree, "OPTIONS", &Options);
@@ -218,6 +222,9 @@ EFI_STATUS OknMT_SetAmtConfig(IN OKN_MEMORY_TEST_PROTOCOL *pProto, IN CONST cJSO
     }
     AmtCfg.AmtOptArr[i].Pattern = Pattern64;
   }
+
+  // 4) 打印
+  OknMT_PrintAmtConfig(&AmtCfg);
 
   // 3) 下发给 BIOS
   Status = pProto->SetAmtConfig(&AmtCfg);
@@ -450,4 +457,63 @@ EFI_STATUS OknMT_TranslatedAddressFromSystemToDimm(IN OKN_MEMORY_TEST_PROTOCOL  
   CopyMem(pTranslatedAddress, &TranslatedAddr, sizeof(OKN_DIMM_ADDRESS_DETAIL_BASE));
 
   return EFI_SUCCESS;
+}
+
+STATIC VOID OknMT_SetAmtConfigDefault(OUT OKN_AMT_CONFIGURATION *AmtCfg)
+{
+  if (NULL == AmtCfg) {
+    Print(L"[OKN_AMT] AmtCfg is NULL\n");
+    return;
+  }
+
+  AmtCfg->AdvMemTestOptions = 0;  // —— 参考下述每个Bit定义
+  AmtCfg->AdvMemTestLoops   = 1;  // —— 默认为1, 范围0-0xFF
+  AmtCfg->AdvMemTestPpr     = 1;  // —— 0=disable 1=enable(默认), 属于AMT大测试的一个功能之一
+  // clang-format off
+  for (UINT32 i = 0; i < OKN_AMT_OPT_COUNT; ++i) {
+    AmtCfg->AmtOptArr[i].AdvMemTestCondition = 1;     // ——  0=disable(无意义) 1=Auto(默认, 使用BIOS默认参数测试) 2=Manual(覆盖BIOS设置值)
+    AmtCfg->AmtOptArr[i].PmicVddLevel        = 0;     // ——  DDR4无效
+    AmtCfg->AmtOptArr[i].PmicVddQLevel       = 0;     // ——  DDR4无效
+    AmtCfg->AmtOptArr[i].TwrValue            = 10;    // ——  默认10(10-26), units = tCK
+    AmtCfg->AmtOptArr[i].TrefiValue          = 15600; // ——  默认15600(3900-32767), units = nsec
+    AmtCfg->AmtOptArr[i].AdvMemTestCondPause = 0;     // ——  受Condition影响, Condition=2, 生效为设置值; Condition=1, 生效为预设值
+    AmtCfg->AmtOptArr[i].BgInterleave        = 2;     // ——  每项测试默认都是2, 可取值1或者2
+    AmtCfg->AmtOptArr[i].AddressMode         = 0;     // ——  取值0或者1(0=FAST_X  1=FAST_Y)   
+    AmtCfg->AmtOptArr[i].Pattern             = 0;     // ——  UINT64值即可(从basePatternQW换算为最终的Pattern)
+  }
+  // clang-format on
+  return;
+}
+
+STATIC VOID OknMT_PrintAmtConfig(IN CONST OKN_AMT_CONFIGURATION *AmtCfg)
+{
+  if (NULL == AmtCfg) {
+    Print(L"[OKN_AMT] AmtCfg is NULL\n");
+    return;
+  }
+
+  Print(L"===== OKN Dump OKN_AMT_CONFIGURATION ON ======\n");
+  Print(L"  AmtOpts : 0x%08x\n", (UINTN)AmtCfg->AdvMemTestOptions);
+  Print(L"  AmtLoops: %u\n", (UINTN)AmtCfg->AdvMemTestLoops);
+  Print(L"  AmtPPR  : %u\n", (UINTN)AmtCfg->AdvMemTestPpr);
+
+  Print(L"  --- Dump OKN_AMT_OPT (enabled bits) ---\n");
+  for (UINT32 i = 0; i < OKN_AMT_OPT_COUNT; ++i) {
+    Print(L"   [%02u - %s] Cond:%u vdd:%u vddq:%u tWR:%u tREFI:%u pause:%u bg:%u AM:%u PTN:0x%016lx\n",
+          (UINTN)i,
+          ((AmtCfg->AdvMemTestOptions >> i) & 0x1) ? "ON" : "OFF",
+          (UINTN)AmtCfg->AmtOptArr[i].AdvMemTestCondition,
+          (UINTN)AmtCfg->AmtOptArr[i].PmicVddLevel,
+          (UINTN)AmtCfg->AmtOptArr[i].PmicVddQLevel,
+          (UINTN)AmtCfg->AmtOptArr[i].TwrValue,
+          (UINTN)AmtCfg->AmtOptArr[i].TrefiValue,
+          (UINTN)AmtCfg->AmtOptArr[i].AdvMemTestCondPause,
+          (UINTN)AmtCfg->AmtOptArr[i].BgInterleave,
+          (UINTN)AmtCfg->AmtOptArr[i].AddressMode,
+          (UINT64)AmtCfg->AmtOptArr[i].Pattern);
+    // if (((AmtCfg->AdvMemTestOptions >> i) & 0x1) != 0) {
+    // }
+  }
+  Print(L"  --- Dump OKN_AMT_OPT OFF ---\n");
+  Print(L"===== OKN Dump OKN_AMT_CONFIGURATION OFF ======\n\n");
 }
