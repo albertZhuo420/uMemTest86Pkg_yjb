@@ -255,7 +255,7 @@ EFI_STATUS OknMT_GetMemConfigFunc(IN OKN_MEMORY_TEST_PROTOCOL *pProto, IN BOOLEA
 
   ZeroMem(&Cfg, sizeof(Cfg));
 
-  if (Real) {
+  if (TRUE == Real) {
     if (NULL == pProto->GetMemConfigReal) {
       return EFI_UNSUPPORTED;
     }
@@ -268,7 +268,7 @@ EFI_STATUS OknMT_GetMemConfigFunc(IN OKN_MEMORY_TEST_PROTOCOL *pProto, IN BOOLEA
     Status = pProto->GetMemConfig(&Cfg);
   }
 
-  if (EFI_ERROR(Status)) {
+  if (TRUE == EFI_ERROR(Status)) {
     Print(L"GetMemConfig%s failed: %r\n", Real ? L"Real" : L"", Status);
     return Status;
   }
@@ -281,8 +281,6 @@ EFI_STATUS OknMT_GetMemConfigFunc(IN OKN_MEMORY_TEST_PROTOCOL *pProto, IN BOOLEA
       Print(L"[OKN_UEFI_ERR] OknMT_SetMemCfgToJson failed: %r\n", Status);
     }
   }
-
-  cJSON_AddBoolToObject(pJsTree, "SUCCESS", (FALSE == EFI_ERROR(Status)));
 
   return EFI_SUCCESS;
 }
