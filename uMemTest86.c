@@ -3360,10 +3360,12 @@ UefiMain(
                 }
             }
 #endif // OKN_MT86
+#ifdef OKN_MT86
             if (!gOKnSkipWaiting) {
                 UINTN EventIndex;
                 gBS->WaitForEvent(1, &gST->ConIn->WaitForKey, &EventIndex);
             }
+#endif // OKN_MT86
 
             // If AUTOMODE=1 is not set, display test complete message
             if (gAutoMode != AUTOMODE_ON || (TestResult == RESULT_FAIL && gAutoPromptFail))
