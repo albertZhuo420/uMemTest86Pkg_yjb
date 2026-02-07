@@ -109,59 +109,62 @@ EFI_STATUS OknMT_SetMemCfgToJson(IN CONST OKN_MEMORY_CONFIGURATION *pCfg, OUT cJ
     return EFI_INVALID_PARAMETER;
   }
 
-  GetSetJsonObjInt(pJsTree, "Freq", pCfg->DdrFreqLimit);
-  GetSetJsonObjInt(pJsTree, "tCL", pCfg->tCAS);
-  GetSetJsonObjInt(pJsTree, "tRCD", pCfg->tRCD);
-  GetSetJsonObjInt(pJsTree, "tRP", pCfg->tRP);
-  GetSetJsonObjInt(pJsTree, "tRAS", pCfg->tRAS);
-  GetSetJsonObjInt(pJsTree, "tCWL", pCfg->tCWL);
-  GetSetJsonObjInt(pJsTree, "tRTP", pCfg->tRTP);
-  GetSetJsonObjInt(pJsTree, "tWR", pCfg->tWR);
-  GetSetJsonObjInt(pJsTree, "tRRD_S", pCfg->tRRD);
-  GetSetJsonObjInt(pJsTree, "tFAW", pCfg->tFAW);
-  GetSetJsonObjInt(pJsTree, "tREFI", pCfg->tREFI);
-  GetSetJsonObjInt(pJsTree, "tWTR_S", pCfg->tWTR);
-  GetSetJsonObjInt(pJsTree, "tRFC", pCfg->tRFC1);
-  GetSetJsonObjInt(pJsTree, "tRC", pCfg->tRC);
-  GetSetJsonObjInt(pJsTree, "tCCD", pCfg->tCCD);
-  GetSetJsonObjInt(pJsTree, "CommandRate", pCfg->CommandTiming);
+  /**
+   * GetSetJsonObjInt(pJsTree, "Freq", pCfg->DdrFreqLimit); 这个函数只有在Json中有"Freq"字段才能设置"Freq",
+   * 如果没有就不会创建再设置
+   */
+  OknMT_JsonSetNumber(pJsTree, "Freq", pCfg->DdrFreqLimit);
+  OknMT_JsonSetNumber(pJsTree, "tCL", pCfg->tCAS);
+  OknMT_JsonSetNumber(pJsTree, "tRCD", pCfg->tRCD);
+  OknMT_JsonSetNumber(pJsTree, "tRP", pCfg->tRP);
+  OknMT_JsonSetNumber(pJsTree, "tRAS", pCfg->tRAS);
+  OknMT_JsonSetNumber(pJsTree, "tCWL", pCfg->tCWL);
+  OknMT_JsonSetNumber(pJsTree, "tRTP", pCfg->tRTP);
+  OknMT_JsonSetNumber(pJsTree, "tWR", pCfg->tWR);
+  OknMT_JsonSetNumber(pJsTree, "tRRD_S", pCfg->tRRD);
+  OknMT_JsonSetNumber(pJsTree, "tFAW", pCfg->tFAW);
+  OknMT_JsonSetNumber(pJsTree, "tREFI", pCfg->tREFI);
+  OknMT_JsonSetNumber(pJsTree, "tWTR_S", pCfg->tWTR);
+  OknMT_JsonSetNumber(pJsTree, "tRFC", pCfg->tRFC1);
+  OknMT_JsonSetNumber(pJsTree, "tRC", pCfg->tRC);
+  OknMT_JsonSetNumber(pJsTree, "tCCD", pCfg->tCCD);
+  OknMT_JsonSetNumber(pJsTree, "CommandRate", pCfg->CommandTiming);
   // Voltages
-  GetSetJsonObjInt(pJsTree, "Vdd", pCfg->DfxPmicVdd);
-  GetSetJsonObjInt(pJsTree, "Vddq", pCfg->DfxPmicVddQ);
-  GetSetJsonObjInt(pJsTree, "Vpp", pCfg->DfxPmicVpp);
+  OknMT_JsonSetNumber(pJsTree, "Vdd", pCfg->DfxPmicVdd);
+  OknMT_JsonSetNumber(pJsTree, "Vddq", pCfg->DfxPmicVddQ);
+  OknMT_JsonSetNumber(pJsTree, "Vpp", pCfg->DfxPmicVpp);
   // MISC
-  GetSetJsonObjInt(pJsTree, "EnRMT", pCfg->EnableRMT);
-  GetSetJsonObjInt(pJsTree, "Por", pCfg->EnforcePopulationPor);
-  GetSetJsonObjInt(pJsTree, "Ecs", pCfg->ErrorCheckScrub);  // unsupported in DDR4
-  GetSetJsonObjInt(pJsTree, "PprType", pCfg->PprType);
-  //   GetSetJsonObjInt(pJsTree, "AmtPpr", pCfg->AdvMemTestPpr);
+  OknMT_JsonSetNumber(pJsTree, "EnRMT", pCfg->EnableRMT);
+  OknMT_JsonSetNumber(pJsTree, "Por", pCfg->EnforcePopulationPor);
+  OknMT_JsonSetNumber(pJsTree, "Ecs", pCfg->ErrorCheckScrub);  // unsupported in DDR4
+  OknMT_JsonSetNumber(pJsTree, "PprType", pCfg->PprType);
   // ECC
-  GetSetJsonObjInt(pJsTree, "DirectoryModeEn", pCfg->DirectoryModeEn);
-  GetSetJsonObjInt(pJsTree, "DdrEccEnable", pCfg->DdrEccEnable);
-  GetSetJsonObjInt(pJsTree, "DdrEccCheck", pCfg->DdrEccCheck);
+  OknMT_JsonSetNumber(pJsTree, "DirectoryModeEn", pCfg->DirectoryModeEn);
+  OknMT_JsonSetNumber(pJsTree, "DdrEccEnable", pCfg->DdrEccEnable);
+  OknMT_JsonSetNumber(pJsTree, "DdrEccCheck", pCfg->DdrEccCheck);
 
 #if 0
-    GetSetJsonObjInt(pJsTree, "AmtRetry", pCfg->AdvMemTestRetryAfterRepair);
-	GetSetJsonObjInt(pJsTree, "tRRDR", pCfg->tRRDR);
-	GetSetJsonObjInt(pJsTree, "tRWDR", pCfg->tRWDR);
-	GetSetJsonObjInt(pJsTree, "tWRDR", pCfg->tWRDR);
-	GetSetJsonObjInt(pJsTree, "tWWDR", pCfg->tWWDR);
-	GetSetJsonObjInt(pJsTree, "tRRSG", pCfg->tRRSG);
-	GetSetJsonObjInt(pJsTree, "tRWSG", pCfg->tRWSG);
-	GetSetJsonObjInt(pJsTree, "tWRSG", pCfg->tWRSG);
-	GetSetJsonObjInt(pJsTree, "tWWSG", pCfg->tWWSG);
-	GetSetJsonObjInt(pJsTree, "tRRDD", pCfg->tRRDD);
-	GetSetJsonObjInt(pJsTree, "tRWDD", pCfg->tRWDD);
-	GetSetJsonObjInt(pJsTree, "tWRDD", pCfg->tWRDD);
-	GetSetJsonObjInt(pJsTree, "tWWDD", pCfg->tWWDD);
-	GetSetJsonObjInt(pJsTree, "tRRSR", pCfg->tRRSR);
-	GetSetJsonObjInt(pJsTree, "tRWSR", pCfg->tRWSR);
-	GetSetJsonObjInt(pJsTree, "tWRSR", pCfg->tWRSR);
-	GetSetJsonObjInt(pJsTree, "tWWSR", pCfg->tWWSR);
-	GetSetJsonObjInt(pJsTree, "tRRDS", pCfg->tRRDS);
-	GetSetJsonObjInt(pJsTree, "tRWDS", pCfg->tRWDS);
-	GetSetJsonObjInt(pJsTree, "tWRDS", pCfg->tWRDS);
-	GetSetJsonObjInt(pJsTree, "tWWDS", pCfg->tWWDS);
+    OknMT_JsonSetNumber(pJsTree, "AmtRetry", pCfg->AdvMemTestRetryAfterRepair);
+	OknMT_JsonSetNumber(pJsTree, "tRRDR", pCfg->tRRDR);
+	OknMT_JsonSetNumber(pJsTree, "tRWDR", pCfg->tRWDR);
+	OknMT_JsonSetNumber(pJsTree, "tWRDR", pCfg->tWRDR);
+	OknMT_JsonSetNumber(pJsTree, "tWWDR", pCfg->tWWDR);
+	OknMT_JsonSetNumber(pJsTree, "tRRSG", pCfg->tRRSG);
+	OknMT_JsonSetNumber(pJsTree, "tRWSG", pCfg->tRWSG);
+	OknMT_JsonSetNumber(pJsTree, "tWRSG", pCfg->tWRSG);
+	OknMT_JsonSetNumber(pJsTree, "tWWSG", pCfg->tWWSG);
+	OknMT_JsonSetNumber(pJsTree, "tRRDD", pCfg->tRRDD);
+	OknMT_JsonSetNumber(pJsTree, "tRWDD", pCfg->tRWDD);
+	OknMT_JsonSetNumber(pJsTree, "tWRDD", pCfg->tWRDD);
+	OknMT_JsonSetNumber(pJsTree, "tWWDD", pCfg->tWWDD);
+	OknMT_JsonSetNumber(pJsTree, "tRRSR", pCfg->tRRSR);
+	OknMT_JsonSetNumber(pJsTree, "tRWSR", pCfg->tRWSR);
+	OknMT_JsonSetNumber(pJsTree, "tWRSR", pCfg->tWRSR);
+	OknMT_JsonSetNumber(pJsTree, "tWWSR", pCfg->tWWSR);
+	OknMT_JsonSetNumber(pJsTree, "tRRDS", pCfg->tRRDS);
+	OknMT_JsonSetNumber(pJsTree, "tRWDS", pCfg->tRWDS);
+	OknMT_JsonSetNumber(pJsTree, "tWRDS", pCfg->tWRDS);
+	OknMT_JsonSetNumber(pJsTree, "tWWDS", pCfg->tWWDS);
 #endif
 
   return EFI_SUCCESS;
@@ -276,6 +279,7 @@ EFI_STATUS OknMT_GetMemConfigFunc(IN OKN_MEMORY_TEST_PROTOCOL *pProto, IN BOOLEA
   // PrintMemCfg(&Cfg); // 调试用
 
   if (FALSE == EFI_ERROR(Status)) {
+    OknMT_PrintMemCfg(&Cfg);
     Status = OknMT_SetMemCfgToJson(&Cfg, pJsTree);
     if (TRUE == EFI_ERROR(Status)) {
       Print(L"[OKN_UEFI_ERR] OknMT_SetMemCfgToJson failed: %r\n", Status);
